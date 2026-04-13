@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donor Profile - BloodLink BD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="css/style.css">
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: '#dc2626' } } } }
+    </script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen">
+
+    <nav class="p-4 flex items-center gap-4 max-w-md mx-auto">
+        <a href="javascript:history.back()" class="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 rounded-full shadow-sm"><i class="fa-solid fa-arrow-left"></i></a>
+        <h1 class="font-bold text-lg">Donor Details</h1>
+    </nav>
+
+    <main class="max-w-md mx-auto p-4 space-y-6">
+        <div class="bg-white dark:bg-slate-800 rounded-[2.5rem] p-8 text-center shadow-sm border border-slate-100 dark:border-slate-700 relative overflow-hidden">
+            <!-- Background Decoration -->
+            <div class="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full -mr-16 -mt-16"></div>
+            
+            <div class="flex justify-center mb-4">
+                <div id="view-avatar-container" class="w-24 h-24 bg-red-50 dark:bg-slate-700 text-brand rounded-full flex items-center justify-center text-4xl font-black border-4 border-white dark:border-slate-600 shadow-lg overflow-hidden z-10 relative">
+                    <i class="fa-solid fa-spinner fa-spin text-2xl"></i>
+                </div>
+            </div>
+
+            <!-- 💥 Badge Container 💥 -->
+            <div id="view-badge-container" class="mb-3 h-6"></div>
+            
+            <h2 class="text-2xl font-black text-slate-800 dark:text-white mb-1" id="view-name">Loading...</h2>
+            <p class="text-sm text-slate-500 font-medium" id="view-location"><i class="fa-solid fa-location-dot mr-1 text-brand/70"></i> --</p>
+            
+            <!-- 💥 Bio Section (Quote Style) 💥 -->
+            <div id="bio-section" class="hidden mt-5 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border-l-4 border-brand text-left relative">
+                <i class="fa-solid fa-quote-left text-slate-200 dark:text-slate-700 absolute top-2 right-4 text-3xl opacity-50"></i>
+                <p id="view-bio" class="text-sm text-slate-600 dark:text-slate-300 italic font-medium relative z-10">...</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mt-6">
+                <div class="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-3xl border border-slate-100 dark:border-slate-700">
+                    <p class="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Blood Group</p>
+                    <p class="text-xl font-black text-brand" id="view-bg">--</p>
+                </div>
+                <div class="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-3xl border border-slate-100 dark:border-slate-700">
+                    <p class="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Donations</p>
+                    <p class="text-xl font-black text-slate-700 dark:text-slate-200" id="view-count">0</p>
+                </div>
+            </div>
+
+            <button onclick="sharePublicProfile()" class="w-full mt-6 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-white py-4 rounded-2xl font-bold flex justify-center items-center gap-2 hover:bg-slate-200 dark:hover:bg-slate-600 transition">
+                <i class="fa-solid fa-share-nodes"></i> Share Profile
+            </button>
+        </div>
+
+        <div class="flex gap-3">
+            <a id="call-btn" href="#" class="flex-1 bg-brand text-white py-4 rounded-2xl font-bold text-center shadow-lg shadow-red-200 dark:shadow-none hover:bg-red-700 transition"><i class="fa-solid fa-phone mr-2"></i> Call Now</a>
+            <a id="wa-btn" href="#" target="_blank" class="w-16 bg-green-500 text-white rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-green-200 dark:shadow-none hover:bg-green-600 transition"><i class="fa-brands fa-whatsapp"></i></a>
+        </div>
+    </main>
+
+    <script src="js/script.js"></script>
+    <script>
+        // 🏆 ব্যাজ জেনারেট করার লজিক
+        function getBadgeHTML(count) {
+            if (count >= 5) return `<span class="inline-flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 px-3 py-1 rounded-full text-xs font-black border border-amber-200 dark:border-amber-800 uppercase tracking-wider shadow-sm"><i class="fa-solid fa-award"></i> Super Hero</span>`;
+            if (count >= 3) return `<span class="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-black border border-slate-200 dark:border-slate-600 uppercase tracking-wider shadow-sm"><i class="fa-solid fa-medal"></i> Regular Donor</span>`;
+            if (count >= 1) return `<span class="inline-flex items-center gap-1.5 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 px-3 py-1 rounded-full text-xs font-black border border-orange-200 dark:border-orange-800 uppercase tracking-wider shadow-sm"><i class="fa-solid fa-certificate"></i> New Donor</span>`;
+            return ''; 
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            const donorId = params.get('id');
+            if(!donorId) return;
+
+            const { data: donor } = await supabaseClient.from('donors').select('*').eq('user_id', donorId).single();
+
+            if(donor) {
+                document.getElementById('view-name').innerText = donor.full_name;
+                document.getElementById('view-bg').innerText = donor.blood_group;
+                
+                // Avatar update
+                if(donor.avatar_url) {
+                    document.getElementById('view-avatar-container').innerHTML = `<img src="${donor.avatar_url}" class="w-full h-full object-cover">`;
+                } else {
+                    document.getElementById('view-avatar-container').innerHTML = `<span class="text-4xl">${donor.full_name.charAt(0)}</span>`;
+                }
+
+                // Badge update
+                document.getElementById('view-badge-container').innerHTML = getBadgeHTML(donor.total_donations || 0);
+
+                // Location update
+                document.getElementById('view-location').innerHTML = `<i class="fa-solid fa-location-dot mr-1 text-brand/70"></i> ${donor.upazila && donor.district ? donor.upazila + ', ' + donor.district : 'Location Not Shared'}`;
+                
+                // Donations
+                document.getElementById('view-count').innerText = donor.total_donations || 0;
+                
+                // 💥 Bio display logic 💥
+                if (donor.bio && donor.bio.trim() !== "") {
+                    document.getElementById('bio-section').classList.remove('hidden');
+                    document.getElementById('view-bio').innerText = donor.bio;
+                }
+
+                // Buttons
+                const donorPhone = donor.phone_number || donor.phone || '';
+                document.getElementById('call-btn').href = `tel:${donorPhone}`;
+                document.getElementById('call-btn').onclick = (event) => callDonorForDonation(event, donorPhone, donor.user_id, donor.full_name);
+                document.getElementById('wa-btn').href = `https://wa.me/+88${donorPhone}`;
+            }
+        });
+
+        function sharePublicProfile() {
+            const profileUrl = window.location.href;
+            const shareText = `Contact ${document.getElementById('view-name').innerText} for blood donation!`;
+            if (navigator.share && window.isSecureContext) {
+                navigator.share({ title: 'Donor Profile', text: shareText, url: profileUrl }).catch(err => console.log(err));
+            } else {
+                try {
+                    const textArea = document.createElement("textarea"); textArea.value = profileUrl; document.body.appendChild(textArea); textArea.select(); document.execCommand('copy'); document.body.removeChild(textArea);
+                    alert('Profile link copied to clipboard!');
+                } catch (err) { prompt("Copy this link:", profileUrl); }
+            }
+        }
+    </script>
+</body>
+</html>

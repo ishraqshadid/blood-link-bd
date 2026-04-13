@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Search Results - BloodLink BD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="css/style.css">
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: '#dc2626' } } } }
+    </script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans antialiased min-h-screen">
+
+    <nav class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 sticky top-0 z-40 shadow-sm flex items-center justify-between">
+        <a href="index.html" class="text-slate-600 dark:text-slate-300 hover:text-brand transition text-xl"><i class="fa-solid fa-arrow-left"></i></a>
+        <div class="font-bold text-lg text-brand">Search Results</div>
+        <div class="w-5"></div>
+    </nav>
+
+    <main class="max-w-md mx-auto p-4 space-y-4">
+        <section class="bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700 space-y-3">
+            <div class="flex items-center gap-2 mb-1 px-1">
+                <i class="fa-solid fa-filter text-brand text-xs"></i>
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter by Location</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <select id="filter-district" class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-red-500/20">
+                    <option value="">All Districts</option>
+                </select>
+                <select id="filter-upazila" class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-red-500/20" disabled>
+                    <option value="">All Upazilas</option>
+                </select>
+            </div>
+        </section>
+
+        <h2 id="result-header" class="text-center font-bold text-slate-500 mb-4 text-sm tracking-tight">Searching...</h2>
+
+        <div id="search-results-container" class="space-y-4 pb-10">
+            <div class="text-center py-10"><i class="fa-solid fa-spinner fa-spin text-brand text-3xl"></i></div>
+        </div>
+    </main>
+
+    <script src="js/script.js"></script>
+    <script>
+        let allDonors = [];
+        let userDistrict = '';
+        let userUpazila = '';
+        let allDistrictsData = [];
+        let allUpazilasData = [];
+
+        function extractGeoArrayLocal(json) {
+            if (Array.isArray(json)) {
+                const found = json.find(item => item && Array.isArray(item.data));
+                if (found) return found.data;
+            }
+            if (json && Array.isArray(json.data)) return json.data;
+            return [];
+        }
+
+        async function loadGeoData() {
+            const [distRes, upzRes] = await Promise.all([
+                fetch('https://raw.githubusercontent.com/nuhil/bangladesh-geocode/master/districts/districts.json'),
+                fetch('https://raw.githubusercontent.com/nuhil/bangladesh-geocode/master/upazilas/upazilas.json')
+            ]);
+
+            const [distJson, upzJson] = await Promise.all([distRes.json(), upzRes.json()]);
+            allDistrictsData = extractGeoArrayLocal(distJson);
+            allUpazilasData = extractGeoArrayLocal(upzJson);
+
+            const distSelect = document.getElementById('filter-district');
+            distSelect.innerHTML = '<option value="">All Districts</option>';
+            allDistrictsData
+                .slice()
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .forEach(d => {
+                    const opt = new Option(d.name, d.name);
+                    if (d.name === userDistrict) opt.selected = true;
+                    distSelect.add(opt);
+                });
+
+            if (userDistrict) updateUpazilaOptions(userDistrict, userUpazila);
+        }
+
+        function updateUpazilaOptions(distName, selectedUpz = '') {
+            const upzSelect = document.getElementById('filter-upazila');
+            upzSelect.innerHTML = '<option value="">All Upazilas</option>';
+            upzSelect.disabled = true;
+
+            if (!distName) return;
+
+            const districtObj = allDistrictsData.find(d => d.name === distName);
+            if (!districtObj) return;
+
+            allUpazilasData
+                .filter(upz => String(upz.district_id) === String(districtObj.id))
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .forEach(upz => {
+                    const opt = new Option(upz.name, upz.name);
+                    if (upz.name === selectedUpz) opt.selected = true;
+                    upzSelect.add(opt);
+                });
+
+            upzSelect.disabled = false;
+        }
+
+
+        function toSingleQuotedArg(value = '') {
+            return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        function renderDonors() {
+            const selectedDist = document.getElementById('filter-district').value;
+            const selectedUpz = document.getElementById('filter-upazila').value;
+            const container = document.getElementById('search-results-container');
+
+            const filtered = allDonors.filter(donor => {
+                const donorDistrict = donor.district || '';
+                const donorUpazila = donor.upazila || '';
+                return (!selectedDist || donorDistrict === selectedDist) && (!selectedUpz || donorUpazila === selectedUpz);
+            });
+
+            document.getElementById('result-header').innerHTML = `Donors found: <span class="text-brand font-black">${filtered.length}</span>`;
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="bg-white dark:bg-slate-800 p-10 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 text-center font-bold text-slate-500">No donors found.</div>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(donor => {
+                const avatar = donor.avatar_url
+                    ? `<img src="${donor.avatar_url}" class="w-full h-full object-cover">`
+                    : `<span class="text-xl font-black">${(donor.full_name || 'U').charAt(0)}</span>`;
+
+                return `
+                <div onclick="window.location.href='public-profile.html?id=${donor.user_id}'" class="cursor-pointer bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700 space-y-4 transition-all hover:shadow-md active:scale-95">
+                    <div class="flex items-center gap-3">
+                        <div class="w-14 h-14 bg-red-50 dark:bg-slate-700 text-brand rounded-full flex flex-col items-center justify-center border-2 border-red-100 dark:border-slate-600 shadow-inner overflow-hidden flex-shrink-0">
+                            ${avatar}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-start justify-between gap-2">
+                                <h3 class="font-bold text-slate-800 dark:text-white text-base truncate">${donor.full_name || 'Unknown Donor'}</h3>
+                                <span class="bg-red-50 dark:bg-red-900/30 text-brand text-xs font-black px-2.5 py-1 rounded-lg border border-red-100 dark:border-red-800 flex-shrink-0">${donor.blood_group || '--'}</span>
+                            </div>
+                            <p class="text-xs text-slate-500 font-medium truncate mt-1">
+                                <i class="fa-solid fa-location-dot text-brand/70 mr-0.5"></i> ${[donor.upazila, donor.district].filter(Boolean).join(', ') || 'Location not shared'}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2" onclick="event.stopPropagation()">
+                        <a href="tel:${donor.phone_number || ''}" onclick="callDonorForDonation(event, '${toSingleQuotedArg(donor.phone_number || '')}', '${toSingleQuotedArg(donor.user_id || '')}', '${toSingleQuotedArg(donor.full_name || '')}')" class="flex-1 bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 py-3 rounded-2xl text-sm font-bold text-center flex justify-center items-center gap-2">
+                            <i class="fa-solid fa-phone"></i> Call Donor
+                        </a>
+                        <a href="https://wa.me/+88${donor.phone_number || ''}" target="_blank" class="w-14 bg-green-500 text-white rounded-2xl flex items-center justify-center text-xl">
+                            <i class="fa-brands fa-whatsapp"></i>
+                        </a>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const bg = new URLSearchParams(window.location.search).get('bg');
+            if (!bg) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            const container = document.getElementById('search-results-container');
+            const resultHeader = document.getElementById('result-header');
+
+            try {
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                if (session) {
+                    const { data: profile } = await supabaseClient
+                        .from('donors')
+                        .select('district, upazila')
+                        .eq('user_id', session.user.id)
+                        .maybeSingle();
+
+                    if (profile) {
+                        userDistrict = profile.district || '';
+                        userUpazila = profile.upazila || '';
+                    }
+                }
+
+                await loadGeoData();
+
+                const { data: donors, error } = await supabaseClient
+                    .from('donors')
+                    .select('*')
+                    .eq('blood_group', bg)
+                    .order('full_name', { ascending: true });
+
+                if (error) throw error;
+
+                allDonors = (donors || []).filter(donor => donor.is_available !== false);
+                renderDonors();
+
+                document.getElementById('filter-district').addEventListener('change', function () {
+                    updateUpazilaOptions(this.value);
+                    renderDonors();
+                });
+
+                document.getElementById('filter-upazila').addEventListener('change', renderDonors);
+            } catch (err) {
+                console.error('Search page error:', err);
+                container.innerHTML = '<div class="bg-red-50 text-red-500 p-5 rounded-2xl text-center font-bold text-sm border border-red-200">Failed to load data.</div>';
+                resultHeader.innerText = 'Error Loading Data';
+            }
+        });
+    </script>
+</body>
+</html>

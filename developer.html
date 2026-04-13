@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Developer - BloodLink BD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="css/style.css">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: { colors: { brand: '#dc2626' } }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans antialiased min-h-screen transition-colors duration-300">
+
+    <nav class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <a href="index.html" class="text-slate-600 dark:text-slate-300 hover:text-brand transition text-xl">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <div class="text-brand font-bold text-lg">About Developer</div>
+            <div class="w-5"></div>
+        </div>
+    </nav>
+
+    <main class="max-w-md mx-auto p-6 space-y-8">
+
+        <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700 p-8 text-center relative overflow-hidden">
+            <div class="absolute -top-12 -left-12 w-32 h-32 bg-brand/5 rounded-full"></div>
+            
+            <div class="relative">
+                <div class="w-24 h-24 mx-auto rounded-2xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-4xl text-slate-400 mb-4 border border-slate-200 dark:border-slate-600 shadow-inner">
+                    <i class="fa-solid fa-user-code"></i>
+                </div>
+                
+                <h2 class="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Ishraq Shadid</h2>
+                <p class="text-brand font-bold text-xs uppercase tracking-widest mt-1">Front-End Developer</p>
+                
+                <p class="mt-4 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Passionate developer building solutions for a better community. Specialist in modern web technologies and mobile-first design.
+                </p>
+
+                <div class="flex justify-center gap-4 mt-6">
+                    <a href="https://ishraqshadid.netlify.app/" class="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-brand hover:text-white transition">
+                        <i class="fa-brands fa-github"></i>
+                    </a>
+                    <a href="https://www.facebook.com/ishraqshadid" class="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-blue-600 hover:text-white transition">
+                        <i class="fa-brands fa-linkedin-in"></i>
+                    </a>
+                    <a href="https://www.instagram.com/ishraqshadid" class="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-blue-400 hover:text-white transition">
+                        <i class="fa-brands fa-twitter"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Tech Stack</h3>
+            <div class="flex flex-wrap gap-2">
+                <span class="px-4 py-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 text-xs font-bold">React / Next.js</span>
+                <span class="px-4 py-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 text-xs font-bold">Tailwind CSS</span>
+                <span class="px-4 py-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 text-xs font-bold">Supabase</span>
+                <span class="px-4 py-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 text-xs font-bold">Node.js</span>
+                <span class="px-4 py-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 text-xs font-bold">Git</span>
+            </div>
+        </div>
+
+        <div class="bg-slate-100 dark:bg-slate-800/50 p-5 rounded-2xl text-center border border-dashed border-slate-300 dark:border-slate-700">
+            <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Project Status</p>
+            <p class="text-sm font-bold text-slate-700 dark:text-slate-300">BloodLink v1.0.0 (Beta)</p>
+            <p class="text-[10px] text-slate-500 mt-2">Built with care in Bangladesh</p>
+        </div>
+
+    </main>
+
+    <script src="js/script.js"></script>
+</body>
+</html>

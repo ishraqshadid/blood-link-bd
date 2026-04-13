@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BloodLink Admin Panel</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: '#dc2626' } } } }
+  </script>
+  <link rel="stylesheet" href="css/admin.css" />
+</head>
+<body class="bg-slate-950 text-white min-h-screen">
+  <div class="min-h-screen flex">
+    <aside class="hidden lg:flex w-72 bg-slate-900 border-r border-slate-800 flex-col p-5 gap-3 sticky top-0 h-screen">
+      <div class="mb-4">
+        <p class="text-xs uppercase tracking-[0.3em] text-red-400 font-black">BloodLink</p>
+        <h1 class="text-2xl font-black mt-1">Admin Panel</h1>
+        <p class="text-sm text-slate-400 mt-2">A to Z control center</p>
+      </div>
+      <button class="nav-btn active" data-section="overview">Overview</button>
+      <button class="nav-btn" data-section="donors">Donors</button>
+      <button class="nav-btn" data-section="requests">Blood Requests</button>
+      <button class="nav-btn" data-section="verifications">Verifications</button>
+      <button class="nav-btn" data-section="leaderboard">Leaderboard</button>
+      <button class="nav-btn" data-section="settings">Settings</button>
+      <div class="mt-auto space-y-3 pt-6 border-t border-slate-800">
+        <div id="admin-meta" class="text-sm text-slate-400"></div>
+        <button id="logout-btn" class="w-full rounded-2xl bg-slate-800 px-4 py-3 font-bold hover:bg-slate-700 transition">Log Out</button>
+      </div>
+    </aside>
+
+    <main class="flex-1 p-4 lg:p-6">
+      <div class="lg:hidden mb-4 bg-slate-900 border border-slate-800 rounded-3xl p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="text-xs uppercase tracking-[0.3em] text-red-400 font-black">BloodLink</p>
+            <h1 class="text-xl font-black mt-1">Admin Panel</h1>
+          </div>
+          <button id="mobile-logout-btn" class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold">Log Out</button>
+        </div>
+        <div class="grid grid-cols-3 gap-2 mt-4 text-xs">
+          <button class="mobile-tab active" data-section="overview">Overview</button>
+          <button class="mobile-tab" data-section="donors">Donors</button>
+          <button class="mobile-tab" data-section="requests">Requests</button>
+          <button class="mobile-tab" data-section="verifications">Verify</button>
+          <button class="mobile-tab" data-section="leaderboard">Ranks</button>
+          <button class="mobile-tab" data-section="settings">Settings</button>
+        </div>
+      </div>
+
+      <div id="unauthorized" class="hidden bg-amber-500/10 border border-amber-500/30 rounded-3xl p-5 mb-6">
+        <h2 class="text-lg font-black text-amber-300">Admin access not granted</h2>
+        <p class="text-sm text-amber-100/80 mt-2">Run the admin setup SQL, then add your current user_id into the <strong>admins</strong> table with <strong>is_active = true</strong>.</p>
+      </div>
+
+      <section id="section-overview" class="section space-y-6">
+        <div class="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div class="stat-card"><span>Total Donors</span><strong id="stat-donors">—</strong></div>
+          <div class="stat-card"><span>Available Donors</span><strong id="stat-available">—</strong></div>
+          <div class="stat-card"><span>Open Requests</span><strong id="stat-open-requests">—</strong></div>
+          <div class="stat-card"><span>Pending Verifications</span><strong id="stat-pending">—</strong></div>
+        </div>
+        <div class="grid xl:grid-cols-2 gap-4">
+          <div class="card">
+            <div class="card-head"><h3>Recent Requests</h3><button onclick="BloodLinkAdmin.loadRequests()">Refresh</button></div>
+            <div id="overview-requests" class="space-y-3"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Recent Verifications</h3><button onclick="BloodLinkAdmin.loadVerifications()">Refresh</button></div>
+            <div id="overview-verifications" class="space-y-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="section-donors" class="section hidden space-y-4">
+        <div class="card">
+          <div class="card-head flex-wrap gap-3">
+            <h3>Donor Management</h3>
+            <div class="flex gap-2 w-full sm:w-auto">
+              <input id="donor-search" placeholder="Search donor name / phone / district" class="input flex-1 sm:w-80" />
+              <button onclick="BloodLinkAdmin.loadDonors()">Search</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Name</th><th>Blood</th><th>Area</th><th>Status</th><th>Cooldown</th><th>Action</th></tr></thead><tbody id="donors-body"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="section-requests" class="section hidden space-y-4">
+        <div class="card">
+          <div class="card-head flex-wrap gap-3">
+            <h3>Blood Request Control</h3>
+            <div class="flex gap-2 w-full sm:w-auto">
+              <select id="request-filter-status" class="input w-44">
+                <option value="">All Status</option>
+                <option value="open">Open</option>
+                <option value="fulfilled">Fulfilled</option>
+                <option value="expired">Expired</option>
+              </select>
+              <button onclick="BloodLinkAdmin.loadRequests()">Filter</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Patient</th><th>Blood</th><th>Hospital</th><th>Area</th><th>Status</th><th>Action</th></tr></thead><tbody id="requests-body"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="section-verifications" class="section hidden space-y-4">
+        <div class="card">
+          <div class="card-head"><h3>Pending Verification Queue</h3><button onclick="BloodLinkAdmin.loadVerifications()">Refresh</button></div>
+          <div class="table-wrap"><table><thead><tr><th>Donor</th><th>Requester</th><th>Status</th><th>Created</th><th>Action</th></tr></thead><tbody id="verifications-body"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="section-leaderboard" class="section hidden space-y-4">
+        <div class="grid xl:grid-cols-2 gap-4">
+          <div class="card">
+            <div class="card-head"><h3>All Time Top Donors</h3><button onclick="BloodLinkAdmin.loadLeaderboard()">Refresh</button></div>
+            <div id="leaderboard-all" class="space-y-3"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>This Month Top Donors</h3><button onclick="BloodLinkAdmin.loadLeaderboard()">Refresh</button></div>
+            <div id="leaderboard-month" class="space-y-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="section-settings" class="section hidden space-y-4">
+        <div class="card">
+          <div class="card-head"><h3>App Controls</h3><button onclick="BloodLinkAdmin.saveSettings()">Save Settings</button></div>
+          <div class="grid md:grid-cols-2 gap-4 mt-4">
+            <label class="field"><span>Auto-expire days</span><input id="setting-auto-expire-days" class="input" type="number" min="1" /></label>
+            <label class="field"><span>Emergency alert minimum bags</span><input id="setting-emergency-min-bags" class="input" type="number" min="1" /></label>
+            <label class="field"><span>Cooldown days</span><input id="setting-cooldown-days" class="input" type="number" min="1" /></label>
+            <label class="field"><span>Priority scope</span>
+              <select id="setting-alert-priority-scope" class="input">
+                <option value="upazila_first">Upazila first</option>
+                <option value="district_only">District only</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Testing Helpers</h3></div>
+          <div class="grid md:grid-cols-3 gap-3 mt-4">
+            <button onclick="BloodLinkAdmin.runQuickReset('cooldown')">Reset My Cooldown</button>
+            <button onclick="BloodLinkAdmin.runQuickReset('pending')">Clear Pending Verifications</button>
+            <button onclick="BloodLinkAdmin.runQuickReset('expired')">Expire Old Requests</button>
+          </div>
+          <p class="text-sm text-slate-400 mt-3">Use testing tools carefully.</p>
+        </div>
+      </section>
+
+      <div id="toast" class="hidden fixed bottom-4 right-4 bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 text-sm shadow-2xl z-50"></div>
+    </main>
+  </div>
+
+  <script src="js/admin.js"></script>
+  <script>window.BLOODLINK_ADMIN_PAGE = 'panel';</script>
+</body>
+</html>

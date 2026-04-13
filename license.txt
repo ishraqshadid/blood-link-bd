@@ -1,0 +1,20 @@
+BloodLink License
+
+Copyright (c) 2026 Ishraq Shadid. All rights reserved.
+
+Permission is granted to use, review, test, and deploy this software for the official BloodLink project owned by the copyright holder.
+
+You may not:
+1. Sell, sublicense, redistribute, or publish this source code as your own product.
+2. Remove or alter copyright, attribution, or ownership notices.
+3. Reuse this codebase, in whole or in part, for another commercial or client project without written permission from the copyright holder.
+4. Copy the design, structure, database logic, admin flows, or notification logic to create a competing product.
+
+You may:
+1. Modify the code for the BloodLink project.
+2. Deploy the code for the BloodLink website, web app, internal admin panel, and future mobile wrapper builds.
+3. Share the code privately with trusted developers working directly on the BloodLink project.
+
+This software is provided "as is", without warranty of any kind, express or implied, including but not limited to merchantability, fitness for a particular purpose, and noninfringement. In no event shall the author be liable for any claim, damages, or other liability arising from, out of, or in connection with the software or the use of the software.
+
+For permissions beyond this license, written approval from the copyright holder is required.

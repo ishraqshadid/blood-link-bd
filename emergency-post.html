@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Emergency Request - BloodLink BD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="css/style.css">
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: '#dc2626' } } } }
+    </script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans antialiased min-h-screen pb-10">
+
+    <nav class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <a href="index.html" class="text-slate-600 dark:text-slate-300 hover:text-brand transition text-xl"><i class="fa-solid fa-arrow-left"></i></a>
+            <div class="font-bold text-lg flex items-center gap-2">
+                <i class="fa-solid fa-truck-medical text-brand"></i> Post Request
+            </div>
+            <div class="w-5"></div>
+        </div>
+    </nav>
+
+    <main class="max-w-md mx-auto p-4 pt-6 space-y-5">
+        <div class="bg-red-50 dark:bg-red-900/20 p-4 rounded-2xl border border-red-100 dark:border-red-800/50 text-center relative overflow-hidden">
+            <div class="absolute -top-5 -right-5 w-20 h-20 bg-red-200/50 dark:bg-red-900/40 rounded-full blur-xl"></div>
+            <h2 class="font-extrabold text-brand dark:text-red-400 text-sm relative z-10">Need Blood Urgently?</h2>
+            <p class="text-xs text-red-600/80 dark:text-red-300/80 mt-1 relative z-10">Fill out this form to notify donors in our network instantly.</p>
+        </div>
+
+        <form onsubmit="submitEmergencyPost(event)" class="space-y-4">
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 space-y-4">
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Patient's Name</label>
+                    <input type="text" id="patient_name" required placeholder="Enter patient name" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 p-3 rounded-xl outline-none focus:border-brand transition">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Blood Group</label>
+                        <select id="blood_group" required class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 p-3 rounded-xl outline-none focus:border-brand transition">
+                            <option value="" disabled selected>Select Group</option>
+                            <option value="A+">A+</option><option value="A-">A-</option>
+                            <option value="B+">B+</option><option value="B-">B-</option>
+                            <option value="O+">O+</option><option value="O-">O-</option>
+                            <option value="AB+">AB+</option><option value="AB-">AB-</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Units (Bags)</label>
+                        <input type="number" id="units" required min="1" max="10" placeholder="E.g., 2" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 p-3 rounded-xl outline-none focus:border-brand transition">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Hospital Name</label>
+                    <input type="text" id="hospital_name" required placeholder="E.g., Dhaka Medical College" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 p-3 rounded-xl outline-none focus:border-brand transition">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">District</label>
+                        <select id="request-district" required class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 p-3 rounded-xl outline-none focus:border-brand transition">
+                            <option value="" disabled selected>Select District</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Upazila</label>
+                        <select id="request-upazila" required disabled class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 p-3 rounded-xl outline-none focus:border-brand transition">
+                            <option value="" disabled selected>Select Upazila</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Contact Number</label>
+                        <input type="tel" id="contact_number" required placeholder="01XXXXXXXXX" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 p-3 rounded-xl outline-none focus:border-brand transition">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Reason / Case Type</label>
+                        <select id="urgency_level" required class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 p-3 rounded-xl outline-none focus:border-brand transition">
+                            <option value="Normal / Regular">Normal / Regular</option>
+                            <option value="Critical / ICU">Critical / ICU</option>
+                            <option value="Pregnant Patient">Pregnant Patient</option>
+                            <option value="Accident / Surgery">Accident / Surgery</option>
+                        </select>
+                    </div>
+                </div>
+
+            </div>
+
+            <button type="submit" id="submit-post-btn" class="w-full bg-brand text-white p-4 rounded-xl font-bold hover:bg-red-700 transition shadow-md flex justify-center items-center gap-2 mt-4">
+                <i class="fa-solid fa-paper-plane"></i> Post Request
+            </button>
+        </form>
+    </main>
+
+    <script src="js/script.js"></script>
+</body>
+</html>

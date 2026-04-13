@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BloodLink Admin Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: '#dc2626' } } } }
+  </script>
+</head>
+<body class="min-h-screen bg-slate-950 text-white">
+  <main class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+      <div class="mb-8">
+        <p class="text-xs uppercase tracking-[0.25em] text-red-400 font-black mb-2">BloodLink Admin</p>
+        <h1 class="text-3xl font-black tracking-tight">Secure Admin Access</h1>
+        <p class="text-sm text-slate-400 mt-2">Sign in with your admin account only.</p>
+      </div>
+
+      <div class="space-y-4">
+        <button id="google-btn" class="w-full rounded-2xl bg-white text-slate-900 font-bold py-3.5 hover:bg-slate-100 transition">Continue with Google</button>
+
+        <div class="relative py-1">
+          <div class="border-t border-slate-800"></div>
+          <span class="absolute left-1/2 -translate-x-1/2 -top-2 bg-slate-900 px-3 text-xs text-slate-500 uppercase">or</span>
+        </div>
+
+        <form id="magic-form" class="space-y-3">
+          <input id="email" type="email" required placeholder="admin@email.com" class="w-full rounded-2xl bg-slate-950 border border-slate-800 px-4 py-3.5 outline-none focus:border-red-500" />
+          <button class="w-full rounded-2xl bg-brand text-white font-bold py-3.5 hover:bg-red-700 transition">Send Magic Link</button>
+        </form>
+      </div>
+
+      <div id="status" class="mt-5 text-sm text-slate-400"></div>
+    </div>
+  </main>
+  <script src="js/admin.js"></script>
+  <script>window.BLOODLINK_ADMIN_PAGE = 'login';</script>
+</body>
+</html>

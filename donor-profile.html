@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>My Profile - BloodLink BD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="css/style.css">
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: '#dc2626' } } } }
+    </script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans antialiased min-h-screen transition-colors duration-300 pb-16">
+
+    <nav class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <a href="index.html" class="text-slate-600 dark:text-slate-300 hover:text-brand transition text-xl"><i class="fa-solid fa-arrow-left"></i></a>
+            <div class="text-brand font-bold text-lg">My Profile</div>
+            <button onclick="handleLogout()" class="text-slate-400 dark:text-slate-500 hover:text-red-500 transition text-sm font-bold">Log Out</button>
+        </div>
+    </nav>
+
+    <main class="max-w-md mx-auto p-4 pt-6 space-y-5">
+        
+        <div id="donor-status-banner" class="hidden transition-all duration-300"></div>
+
+        <!-- Header Section -->
+        <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700 p-6 text-center relative">
+            <div id="view-avatar-container" class="w-20 h-20 mx-auto bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center text-3xl text-slate-400 mb-3 border-4 border-white dark:border-slate-800 shadow-sm overflow-hidden">
+                <i class="fa-solid fa-user"></i>
+            </div>
+            <div id="view-badge-container" class="mb-2"></div>
+            <h2 id="view-name" class="text-xl font-bold">Loading...</h2>
+            <div class="mt-2">
+                <span id="view-bg" class="bg-red-100 text-brand px-3 py-1 rounded-full text-xs font-bold border border-red-200">N/A</span>
+            </div>
+        </div>
+
+        <!-- Availability Toggle -->
+        <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 flex items-center justify-between">
+            <div>
+                <h3 class="font-bold text-sm">Ready to Donate?</h3>
+                <p class="text-xs text-slate-500">Turn off if you are not available</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="isAvailable" class="sr-only peer">
+                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+            </label>
+        </div>
+
+        <!-- Notification Settings -->
+        <button onclick="openNotificationSheet()" class="w-full bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 flex items-center justify-between text-left transition hover:border-red-200 dark:hover:border-slate-600">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-900/20 text-brand flex items-center justify-center border border-red-100 dark:border-red-900/30">
+                    <i class="fa-solid fa-bell"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm">Emergency Alerts</h3>
+                    <p id="notification-subtext" class="text-xs text-slate-500">Turn on alerts for emergency requests in your area.</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <span id="notification-row-badge" class="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300">Off</span>
+            </div>
+        </button>
+
+        <!-- Personal Details Card -->
+        <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 relative">
+            <a href="edit-profile.html" class="absolute top-4 right-4 bg-slate-100 dark:bg-slate-700 text-brand px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-50 transition flex items-center gap-1.5">
+                <i class="fa-solid fa-pen-to-square"></i> Edit
+            </a>
+            
+            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-4">Details</h3>
+            
+            <div class="grid grid-cols-2 gap-y-4 gap-x-2">
+                <div>
+                    <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Phone</p>
+                    <p id="view-phone" class="font-bold text-sm mt-0.5">-</p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Location</p>
+                    <p id="view-location" class="font-bold text-sm mt-0.5">-</p>
+                </div>
+                <div class="col-span-2">
+                    <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Last Donation Date</p>
+                    <p id="view-last-donation" class="font-bold text-sm mt-0.5">-</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Share Button -->
+        <button id="share-my-profile-btn" class="w-full bg-brand text-white p-4 rounded-2xl font-bold flex justify-center items-center gap-2 hover:bg-red-700 transition shadow-lg shadow-red-200 dark:shadow-none">
+            <i class="fa-solid fa-share-nodes"></i> Share My Public Profile
+        </button>
+
+    </main>
+    <div id="notification-sheet-overlay" class="fixed inset-0 bg-black/50 z-50 hidden opacity-0 transition-opacity duration-300" onclick="closeNotificationSheet()"></div>
+    <div id="notification-sheet" class="fixed bottom-0 left-0 right-0 z-50 translate-y-full transition-transform duration-300">
+        <div class="max-w-md mx-auto bg-white dark:bg-slate-800 rounded-t-[2rem] shadow-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-5">
+            <div class="flex justify-center">
+                <div class="w-12 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+            </div>
+            <div class="text-center">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-red-50 dark:bg-red-900/20 text-brand flex items-center justify-center text-xl border border-red-100 dark:border-red-900/30 mb-4">
+                    <i class="fa-solid fa-bell"></i>
+                </div>
+                <h3 class="text-lg font-extrabold text-slate-900 dark:text-white">Stay notified for urgent blood needs</h3>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">Get instant alerts for emergency requests from your area and blood network.</p>
+            </div>
+            <div class="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-700">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-widest text-slate-400">Status</p>
+                        <p id="notification-status-text" class="font-bold text-slate-800 dark:text-white mt-1">Off</p>
+                    </div>
+                    <button onclick="handleNotificationCTA()" class="bg-brand text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-red-200 dark:shadow-none">
+                        <i id="enable-alerts-btn-icon" class="fa-solid fa-bell"></i>
+                        <span id="enable-alerts-btn-text">Enable alerts</span>
+                    </button>
+                </div>
+            </div>
+            <button onclick="closeNotificationSheet()" class="w-full text-sm font-bold text-slate-500 dark:text-slate-400 py-2">Not now</button>
+        </div>
+    </div>
+
+    <script src="js/script.js"></script>
+</body>
+</html>

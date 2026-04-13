@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Blood Requests - BloodLink BD</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="css/style.css">
+  <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { brand: '#dc2626' } } } }</script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans antialiased min-h-screen pb-10">
+  <nav class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 sticky top-0 z-40 shadow-sm flex items-center justify-between">
+    <a href="index.html" class="text-slate-600 dark:text-slate-300 hover:text-brand transition text-xl"><i class="fa-solid fa-arrow-left"></i></a>
+    <div class="font-bold text-lg">All Blood Posts</div>
+    <div class="w-5"></div>
+  </nav>
+
+  <main class="max-w-md mx-auto p-4 pt-6 space-y-4">
+    <section class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 grid grid-cols-3 gap-2">
+      <select id="req-filter-district" class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-2.5 rounded-xl text-[10px] font-black outline-none"><option value="">District</option></select>
+      <select id="req-filter-upazila" class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-2.5 rounded-xl text-[10px] font-black outline-none" disabled><option value="">Upazila</option></select>
+      <select id="req-filter-blood" class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-2.5 rounded-xl text-[10px] font-black outline-none"><option value="">All Groups</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>O+</option><option>O-</option><option>AB+</option><option>AB-</option></select>
+    </section>
+    <div id="requests-container" class="space-y-4"><div class="text-center py-20"><i class="fa-solid fa-spinner fa-spin text-3xl text-brand"></i></div></div>
+  </main>
+
+  <script src="js/script.js"></script>
+  <script>
+    let allRequests = [];
+    let allDistricts = [];
+    let allUpazilas = [];
+
+    function extractGeoArrayLocal(json) {
+      if (Array.isArray(json)) {
+        const found = json.find(item => item && Array.isArray(item.data));
+        if (found) return found.data;
+      }
+      if (json && Array.isArray(json.data)) return json.data;
+      return [];
+    }
+
+    function inferLocation(text) {
+      const normalized = (text || '').toLowerCase();
+      const upz = allUpazilas.find(item => normalized.includes((item.name || '').toLowerCase()));
+      let dist = allDistricts.find(item => normalized.includes((item.name || '').toLowerCase()));
+      if (!dist && upz) dist = allDistricts.find(item => String(item.id) === String(upz.district_id));
+      return { district: dist?.name || '', upazila: upz?.name || '' };
+    }
+
+    function updateUpazilaOptions(districtName, selected = '') {
+      const upzSelect = document.getElementById('req-filter-upazila');
+      upzSelect.innerHTML = '<option value="">Upazila</option>';
+      upzSelect.disabled = true;
+      if (!districtName) return;
+      const districtObj = allDistricts.find(item => item.name === districtName);
+      if (!districtObj) return;
+      allUpazilas.filter(item => String(item.district_id) === String(districtObj.id)).sort((a,b) => a.name.localeCompare(b.name)).forEach(item => {
+        const opt = new Option(item.name, item.name);
+        if (item.name === selected) opt.selected = true;
+        upzSelect.add(opt);
+      });
+      upzSelect.disabled = false;
+    }
+
+    function renderRequests() {
+      const dist = document.getElementById('req-filter-district').value;
+      const upz = document.getElementById('req-filter-upazila').value;
+      const bg = document.getElementById('req-filter-blood').value;
+      const container = document.getElementById('requests-container');
+      const filtered = allRequests.filter(row => {
+        const inferred = { district: row.district || inferLocation(row.hospital_name).district, upazila: row.upazila || inferLocation(row.hospital_name).upazila };
+        return (!dist || inferred.district === dist) && (!upz || inferred.upazila === upz) && (!bg || row.blood_group === bg) && row.status !== 'fulfilled' && isBloodPostActive(row);
+      });
+      if (!filtered.length) {
+        container.innerHTML = '<div class="text-center py-20 text-slate-400 font-bold">No requests match your filters.</div>';
+        return;
+      }
+      container.innerHTML = filtered.sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0)).map(req => {
+        const loc = [req.upazila || inferLocation(req.hospital_name).upazila, req.district || inferLocation(req.hospital_name).district].filter(Boolean).join(', ');
+        return `<div class="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700 space-y-4 relative">
+          <div class="absolute top-5 right-5 bg-brand text-white px-3 py-1 rounded-xl text-[10px] font-black">${req.blood_group || '--'}</div>
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center"><i class="fa-solid fa-user text-slate-400"></i></div>
+            <div class="min-w-0"><h3 class="font-bold text-slate-800 dark:text-white truncate">${req.patient_name || 'Unknown patient'}</h3><p class="text-[9px] text-slate-400 font-bold uppercase tracking-widest">${req.urgency_level || 'Request'}</p>${loc ? `<p class="text-[11px] text-slate-500 truncate mt-1"><i class="fa-solid fa-location-dot text-brand/70"></i> ${loc}</p>` : ''}</div>
+          </div>
+          <div class="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl text-xs space-y-1">
+            <p><i class="fa-solid fa-hospital text-brand mr-2"></i> ${req.hospital_name || 'Hospital not set'}</p>
+            <p><i class="fa-solid fa-droplet text-brand mr-2"></i> ${req.units || 0} Bag(s)</p>
+          </div>
+          <a href="tel:${req.contact_number || ''}" onclick="callRequesterFromPost(event, '${escapeJsString(req.contact_number || '')}', '${escapeJsString(req.user_id || '')}', '${escapeJsString(req.id || '')}', '${escapeJsString(req.patient_name || '')}')" class="w-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 py-3.5 rounded-2xl text-xs font-black flex justify-center items-center gap-2"><i class="fa-solid fa-phone"></i> Call Now</a>
+        </div>`;
+      }).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const [{ data: { session } }, distRes, upzRes] = await Promise.all([
+          supabaseClient.auth.getSession(),
+          fetch('https://raw.githubusercontent.com/nuhil/bangladesh-geocode/master/districts/districts.json'),
+          fetch('https://raw.githubusercontent.com/nuhil/bangladesh-geocode/master/upazilas/upazilas.json')
+        ]);
+        allDistricts = extractGeoArrayLocal(await distRes.json());
+        allUpazilas = extractGeoArrayLocal(await upzRes.json());
+
+        let defaultDistrict = '';
+        if (session) {
+          const { data: profile } = await supabaseClient.from('donors').select('district').eq('user_id', session.user.id).maybeSingle();
+          defaultDistrict = profile?.district || '';
+        }
+        const distSelect = document.getElementById('req-filter-district');
+        allDistricts.sort((a,b) => a.name.localeCompare(b.name)).forEach(item => {
+          const opt = new Option(item.name, item.name);
+          if (item.name === defaultDistrict) opt.selected = true;
+          distSelect.add(opt);
+        });
+        if (defaultDistrict) updateUpazilaOptions(defaultDistrict);
+
+        const { data, error } = await supabaseClient.from('blood_requests').select('*').gte('created_at', getBloodPostCutoffISOString()).neq('status', 'fulfilled');
+        if (error) throw error;
+        allRequests = data || [];
+        renderRequests();
+        distSelect.addEventListener('change', function(){ updateUpazilaOptions(this.value); renderRequests(); });
+        document.getElementById('req-filter-upazila').addEventListener('change', renderRequests);
+        document.getElementById('req-filter-blood').addEventListener('change', renderRequests);
+      } catch (err) {
+        console.error(err);
+        document.getElementById('requests-container').innerHTML = '<div class="text-center py-20 text-red-500 font-bold">Failed to load requests.</div>';
+      }
+    });
+  </script>
+</body>
+</html>

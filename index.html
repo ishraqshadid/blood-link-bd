@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BloodLink BD</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: { colors: { brand: '#dc2626' } }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans antialiased min-h-screen transition-colors duration-300">
+
+    <!-- TOP NAVBAR -->
+    <nav class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-3 sticky top-0 z-40 shadow-sm transition-colors duration-300">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <button onclick="toggleMenu()" class="text-slate-600 dark:text-slate-300 hover:text-brand transition text-xl">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <button id="hidden-admin-trigger" class="text-brand font-bold text-xl flex items-center gap-2 cursor-pointer select-none" type="button" aria-label="BloodLink">
+                <i class="fa-solid fa-droplet"></i> BloodLink
+            </button>
+
+            <a href="login.html" id="nav-profile-icon" class="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-brand transition shadow-sm border border-gray-200 dark:border-slate-700">
+                <i class="fa-regular fa-user text-lg"></i>
+            </a>
+        </div>
+    </nav>
+
+    <!-- HAMBURGER MENU (Updated with Digital Card) -->
+    <div id="menu-overlay" class="fixed inset-0 bg-black/50 z-50 hidden opacity-0 transition-opacity duration-300 backdrop-blur-sm" onclick="toggleMenu()"></div>
+    
+    <div id="side-menu" class="fixed inset-y-0 left-0 w-72 bg-white dark:bg-slate-800 z-50 transform -translate-x-full transition-transform duration-300 shadow-2xl flex flex-col overflow-y-auto">
+        <div class="p-5 flex flex-col gap-6">
+            
+            <!-- 💥 DIGITAL DONOR CARD (Shows when logged in) 💥 -->
+            <div id="menu-donor-card" class="hidden">
+                <div class="bg-gradient-to-br from-red-600 to-red-800 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden">
+                    <div class="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
+                    <div class="absolute bottom-0 right-0 p-2 opacity-10 text-6xl rotate-12">
+                        <i class="fa-solid fa-droplet"></i>
+                    </div>
+                    <div class="relative z-10">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/20">
+                                <i class="fa-solid fa-user text-lg"></i>
+                            </div>
+                            <div>
+                                <h4 id="menu-user-name" class="font-bold text-sm leading-tight tracking-wide">Donor Name</h4>
+                                <p class="text-[9px] opacity-80 uppercase tracking-widest font-black mt-0.5">Verified Donor</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-end">
+                            <div>
+                                <p class="text-[8px] opacity-70 uppercase font-black mb-1">Blood Group</p>
+                                <p id="menu-user-bg" class="text-2xl font-black leading-none">--</p>
+                            </div>
+                            <i class="fa-solid fa-qrcode text-2xl opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center">
+                <span class="font-black text-[10px] text-slate-400 uppercase tracking-[0.2em]" id="menu-title">Menu</span>
+                <button onclick="toggleMenu()" class="text-slate-400 hover:text-brand transition"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <a href="leaderboard.html" class="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition">
+                    <i class="fa-solid fa-trophy text-amber-500 w-5 text-center"></i> 
+                    <span id="nav-leaderboard" class="font-bold text-sm">Top Donors</span>
+                </a>
+
+                <a href="all-requests.html" class="flex items-center gap-3 p-3.5 rounded-2xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-100 dark:border-red-900/30 hover:bg-red-100 transition">
+                    <i class="fa-solid fa-fire-flame-curved w-5 text-center"></i>
+                    <span id="nav-feed" class="font-bold text-sm">All Blood Post</span>
+                </a>
+
+                <a href="requester-dashboard.html" class="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition">
+                    <i class="fa-solid fa-clock-rotate-left w-5 text-center"></i>
+                    <span id="nav-requests" class="font-bold text-sm">My Blood Post</span>
+                </a>
+
+                <button onclick="toggleTheme()" class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-200 hover:bg-slate-100 transition">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-moon w-5 text-center" id="theme-icon"></i>
+                        <span id="theme-text" class="font-bold text-sm">Dark Theme</span>
+                    </div>
+                </button>
+<!-- 💥 LOGOUT BUTTON (Only visible when logged in) 💥 -->
+                <button id="menu-logout-btn" onclick="handleLogout()" class="hidden flex items-center gap-3 p-3.5 rounded-2xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition mt-4">
+                    <i class="fa-solid fa-right-from-bracket w-5 text-center"></i>
+                    <span class="font-bold text-sm">Logout</span>
+                </button>
+            </div>
+
+            <div class="mt-auto pt-6 border-t border-gray-100 dark:border-slate-700">
+                <button onclick="showDeveloper()" class="flex items-center gap-3 p-3 w-full text-slate-500 hover:text-brand transition">
+                    <i class="fa-solid fa-code w-5 text-center"></i>
+                    <span id="nav-dev" class="font-bold text-xs uppercase tracking-widest">Developer</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <main class="max-w-md mx-auto p-4 pt-6 pb-12 space-y-6">
+
+        <section id="home-hero" class="text-center pt-2 pb-2">
+            <h1 id="hero-title" class="text-2xl font-extrabold mb-2 tracking-tight text-slate-900 dark:text-white">
+                Your Blood Can <span class="text-brand">Save a Life</span>
+            </h1>
+            <p id="hero-sub" class="text-slate-500 dark:text-slate-400 text-sm">
+                Find blood donors near you instantly. No login required.
+            </p>
+        </section>
+
+        <!-- SEARCH SECTION -->
+        <section id="home-search" class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 flex flex-col gap-3">
+            <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider" id="search-title">Find Donor</h2>
+
+            <select id="blood-group-select" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 p-3 rounded-xl outline-none focus:border-brand font-medium">
+                <option value="" disabled selected id="select-bg">Select Blood Group</option>
+                <option value="A+">A+</option><option value="A-">A-</option>
+                <option value="B+">B+</option><option value="B-">B-</option>
+                <option value="O+">O+</option><option value="O-">O-</option>
+                <option value="AB+">AB+</option><option value="AB-">AB-</option>
+            </select>
+
+            <button onclick="detectLocation()" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 p-3 rounded-xl flex justify-center items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition font-medium">
+                <i class="fa-solid fa-location-crosshairs text-brand"></i>
+                <span id="loc-btn">Use Current Location</span>
+            </button>
+
+            <button onclick="handleSearch()" class="w-full bg-brand text-white p-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-red-700 transition mt-2 shadow-md shadow-red-200 dark:shadow-none">
+                <i class="fa-solid fa-magnifying-glass"></i> <span id="search-btn">Search Donors</span>
+            </button>
+        </section>
+
+        <!-- EMERGENCY POST SECTION -->
+        <section id="home-emergency" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 p-5 rounded-2xl flex items-center justify-between shadow-sm hover:bg-red-100 dark:hover:bg-red-900/40 transition">
+            <div>
+                <h3 class="font-bold text-red-600 dark:text-red-400 text-lg flex items-center gap-2" id="emergency-title">
+                    <i class="fa-solid fa-truck-medical"></i> Emergency Need?
+                </h3>
+                <p class="text-xs text-slate-600 dark:text-slate-400 mt-1" id="emergency-sub">Post an urgent blood request</p>
+            </div>
+            <button onclick="window.location.href='emergency-post.html'" id="btn-emergency" class="bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 px-5 py-2 rounded-xl text-sm font-bold shadow-md">Post</button>
+        </section>
+
+        <!-- BECOME A DONOR / FEED -->
+        <section id="guest-cta-section" class="bg-red-50 dark:bg-slate-800 rounded-3xl p-6 text-center border border-red-100 dark:border-slate-700 relative overflow-hidden transition-all duration-300">
+            <div class="absolute -top-10 -right-10 w-32 h-32 bg-red-200/50 dark:bg-red-900/20 rounded-full blur-2xl"></div>
+            <h2 id="donor-cta-title" class="text-xl font-extrabold text-slate-800 dark:text-white mb-2 relative z-10"><i class="fa-solid fa-hand-holding-medical text-brand"></i> Become a Donor</h2>
+            <p id="donor-cta-sub" class="text-sm text-slate-600 dark:text-slate-400 mb-5 relative z-10">Join our community and save lives.</p>
+            <a href="login.html" id="donor-cta-btn" class="inline-block bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 px-6 py-3 rounded-full text-sm font-bold shadow-md transition relative z-10">Join Now</a>
+        </section>
+
+        <section id="donor-feed-section" class="hidden space-y-4 transition-all duration-300">
+            <div class="flex justify-between items-center px-1">
+                <h3 class="font-bold text-slate-800 dark:text-white text-lg"><i class="fa-solid fa-droplet text-brand"></i> Urgent Requests</h3>
+                <a href="all-requests.html" class="text-xs font-bold text-brand hover:underline">View All</a>
+            </div>
+            <div id="urgent-requests-container" class="space-y-3">
+                <div class="text-center text-sm text-slate-500 py-6"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>
+            </div>
+        </section>
+    </main>
+
+    <script src="js/script.js"></script>
+</body>
+</html>
