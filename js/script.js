@@ -1,1509 +1,1170 @@
-// ==========================================
-// 1. SUPABASE CONFIGURATION
-// ==========================================
 const SUPABASE_URL = 'https://ahcoliliwwwovdfdpjew.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Szjwx8FpUT2-e-viMDIY6w_sWrXSHK7';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ==========================================
-// 2. THEME, LANGUAGE, GEO & COMMON HELPERS
-// ==========================================
-let currentLang = 'en';
-localStorage.setItem('lang', 'en');
+const publicVapidKey = 'BPT3FXeFUxI6ANp9DjHLzBVftJQzoComjKwSMPB2MGGWJ1nsQNZqND2RWpxQrZ6nUUyCjBdt_pP9bk8LaUNDw1A';
+
 let isDark = localStorage.getItem('theme') === 'dark';
 let menuOpen = false;
-let geoCachePromise = null;
-let pendingRealtimeChannel = null;
+let hiddenAdminTapCount = 0;
+let hiddenAdminTapTimer = null;
 
-if (isDark) document.documentElement.classList.add('dark');
-else document.documentElement.classList.remove('dark');
 document.documentElement.lang = 'en';
+document.documentElement.classList.toggle('dark', isDark);
 
-const dict = {
-    en: {
-        menuTitle: 'Menu',
-        navDev: 'Developer',
-        themeText: 'Dark Theme',
-        navLeaderboard: 'Top Donors',
-        heroTitle: 'Your Blood Can <span class="text-brand">Save a Life</span>',
-        heroSub: 'Find blood donors near you instantly. No login required.',
-        searchTitle: 'Find Donor',
-        selectBg: 'Select Blood Group',
-        locBtn: 'Use Current Location',
-        searchBtn: 'Search Donors',
-        donorCtaTitle: '<i class="fa-solid fa-hand-holding-medical text-brand"></i> Become a Donor',
-        donorCtaSub: 'Join us and save lives.',
-        donorCtaBtn: 'Join Now',
-        emergencyTitle: '<i class="fa-solid fa-truck-medical"></i> Emergency Need?',
-        emergencySub: 'Post an urgent blood request',
-        btnEmergency: 'Post',
-        navFeed: 'Blood Feed',
-        navMyPost: 'My Blood Post'
-    }
-};
+function $(id) {
+  return document.getElementById(id);
+}
 
 function setText(id, text) {
-    const el = document.getElementById(id);
-    if (el) el.innerText = text;
-}
-function setHTML(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = value;
-}
-function escapeHtml(value = '') {
-    return String(value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-}
-function escapeJsString(value = '') {
-    return String(value)
-        .replaceAll('\\', '\\\\')
-        .replaceAll("'", "\\'")
-        .replaceAll('\n', '\\n')
-        .replaceAll('\r', '');
-}
-function normalizeText(value = '') {
-    return String(value)
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\u0980-\u09ff ]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-function extractGeoArray(json) {
-    if (Array.isArray(json)) {
-        const found = json.find(item => item && Array.isArray(item.data));
-        if (found) return found.data;
-    }
-    if (json && Array.isArray(json.data)) return json.data;
-    return [];
-}
-async function getGeoData() {
-    if (!geoCachePromise) {
-        geoCachePromise = Promise.all([
-            fetch('https://raw.githubusercontent.com/nuhil/bangladesh-geocode/master/districts/districts.json').then(r => r.json()),
-            fetch('https://raw.githubusercontent.com/nuhil/bangladesh-geocode/master/upazilas/upazilas.json').then(r => r.json())
-        ]).then(([districtsJson, upazilasJson]) => ({
-            districts: extractGeoArray(districtsJson),
-            upazilas: extractGeoArray(upazilasJson)
-        })).catch(err => {
-            console.error('Geo load error:', err);
-            return { districts: [], upazilas: [] };
-        });
-    }
-    return geoCachePromise;
-}
-function inferLocationFromText(text, districts = [], upazilas = []) {
-    const normalized = normalizeText(text);
-    if (!normalized) return { district: '', upazila: '' };
-
-    let matchedUpazila = upazilas.find(item => normalized.includes(normalizeText(item.name)));
-    let matchedDistrict = districts.find(item => normalized.includes(normalizeText(item.name)));
-
-    if (!matchedDistrict && matchedUpazila) {
-        matchedDistrict = districts.find(item => String(item.id) === String(matchedUpazila.district_id));
-    }
-
-    return {
-        district: matchedDistrict?.name || '',
-        upazila: matchedUpazila?.name || ''
-    };
-}
-async function initLinkedLocationSelects({
-    districtId,
-    upazilaId,
-    defaultDistrict = '',
-    defaultUpazila = '',
-    districtPlaceholder = 'Select District',
-    upazilaPlaceholder = 'Select Upazila'
-}) {
-    const districtSelect = document.getElementById(districtId);
-    const upazilaSelect = document.getElementById(upazilaId);
-    if (!districtSelect || !upazilaSelect) return;
-
-    const { districts, upazilas } = await getGeoData();
-
-    districtSelect.innerHTML = `<option value="" disabled ${defaultDistrict ? '' : 'selected'}>${districtPlaceholder}</option>`;
-    districts
-        .slice()
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .forEach(district => districtSelect.add(new Option(district.name, district.name)));
-
-    function renderUpazilas(districtName, selectedUpazila = '') {
-        upazilaSelect.innerHTML = `<option value="" disabled ${selectedUpazila ? '' : 'selected'}>${upazilaPlaceholder}</option>`;
-        upazilaSelect.disabled = true;
-        if (!districtName) return;
-
-        const districtObj = districts.find(item => item.name === districtName);
-        if (!districtObj) return;
-
-        upazilas
-            .filter(item => String(item.district_id) === String(districtObj.id))
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .forEach(item => upazilaSelect.add(new Option(item.name, item.name)));
-
-        if (selectedUpazila) upazilaSelect.value = selectedUpazila;
-        upazilaSelect.disabled = false;
-    }
-
-    districtSelect.onchange = () => renderUpazilas(districtSelect.value);
-
-    if (defaultDistrict) {
-        districtSelect.value = defaultDistrict;
-        renderUpazilas(defaultDistrict, defaultUpazila);
-    }
+  const el = $(id);
+  if (el) el.textContent = text;
 }
 
+function setHTML(id, html) {
+  const el = $(id);
+  if (el) el.innerHTML = html;
+}
 
-const BLOOD_POST_VISIBLE_DAYS = 4;
+function formatDateTime(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+}
 
-function getBloodPostCutoffISOString(days = BLOOD_POST_VISIBLE_DAYS) {
-    return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+function formatRemaining(ms) {
+  if (ms <= 0) return '0 days left';
+  const totalHours = Math.ceil(ms / (1000 * 60 * 60));
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  if (days > 0) return `${days} day${days > 1 ? 's' : ''}${hours ? ` ${hours}h` : ''} left`;
+  return `${hours} hour${hours > 1 ? 's' : ''} left`;
+}
+
+function isCooldownActive(profile) {
+  if (!profile?.availability_locked || !profile?.cooldown_until) return false;
+  return new Date(profile.cooldown_until).getTime() > Date.now();
 }
 
 function isBloodPostActive(row) {
-    const createdAt = row?.created_at ? new Date(row.created_at).getTime() : 0;
-    if (!createdAt || Number.isNaN(createdAt)) return true;
-    return createdAt >= (Date.now() - BLOOD_POST_VISIBLE_DAYS * 24 * 60 * 60 * 1000);
+  if (!row) return false;
+  if (row.status === 'fulfilled') return false;
+  const createdAt = row.created_at ? new Date(row.created_at).getTime() : Date.now();
+  return Date.now() < createdAt + (4 * 24 * 60 * 60 * 1000);
 }
 
-function isEmergencyUrgency(value = '') {
-    const normalized = String(value).toLowerCase().trim();
-    if (!normalized) return false;
-    return normalized !== 'normal / regular' && normalized !== 'normal' && normalized !== 'regular';
+function getBadgeHTML(count) {
+  if (count >= 10) return `<span class="inline-flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 px-3 py-1 rounded-full text-[10px] font-black border border-amber-200 dark:border-amber-800 uppercase tracking-wider shadow-sm"><i class="fa-solid fa-crown"></i> Legend Donor</span>`;
+  if (count >= 5) return `<span class="inline-flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 px-3 py-1 rounded-full text-[10px] font-black border border-amber-200 dark:border-amber-800 uppercase tracking-wider shadow-sm"><i class="fa-solid fa-award"></i> Hero Donor</span>`;
+  if (count >= 3) return `<span class="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-[10px] font-black border border-slate-200 dark:border-slate-600 uppercase tracking-wider shadow-sm"><i class="fa-solid fa-medal"></i> Regular Donor</span>`;
+  if (count >= 1) return `<span class="inline-flex items-center gap-1.5 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 px-3 py-1 rounded-full text-[10px] font-black border border-orange-200 dark:border-orange-800 uppercase tracking-wider shadow-sm"><i class="fa-solid fa-certificate"></i> Rising Donor</span>`;
+  return '';
 }
 
-function shouldNotifyDistrictDonors(requestRow) {
-    const units = Number(requestRow?.units || 0);
-    return units > 2 && isEmergencyUrgency(requestRow?.urgency_level) && Boolean(requestRow?.district);
+function updateEnglishUi() {
+  setText('menu-title', 'Menu');
+  setText('nav-dev', 'Developer');
+  setText('nav-leaderboard', 'Top Donors');
+  setText('nav-feed', 'All Blood Posts');
+  setText('nav-requests', 'My Blood Posts');
+  setText('theme-text', isDark ? 'Light Theme' : 'Dark Theme');
+  setHTML('hero-title', 'Your Blood Can <span class="text-brand">Save a Life</span>');
+  setText('hero-sub', 'Find blood donors near you instantly. No login required.');
+  setText('search-title', 'Find Donor');
+  setText('select-bg', 'Select Blood Group');
+  setText('loc-btn', 'Use Current Location');
+  setText('search-btn', 'Search Donors');
+  setHTML('donor-cta-title', '<i class="fa-solid fa-hand-holding-medical text-brand"></i> Become a Donor');
+  setText('donor-cta-sub', 'Join us and save lives.');
+  setText('donor-cta-btn', 'Join Now');
+  setHTML('emergency-title', '<i class="fa-solid fa-truck-medical"></i> Emergency Need?');
+  setText('emergency-sub', 'Post an urgent blood request');
+  setText('btn-emergency', 'Post');
+
+  const langButton = document.querySelector('[onclick="toggleLanguage()"]');
+  if (langButton) langButton.style.display = 'none';
 }
 
-async function triggerDistrictEmergencyAlert(requestRow) {
-    if (!requestRow || !shouldNotifyDistrictDonors(requestRow)) return;
-
-    try {
-        const { data, error } = await supabaseClient.functions.invoke('send-verification-push', {
-            body: {
-                action: 'district_request_alert',
-                request: {
-                    id: requestRow.id,
-                    patient_name: requestRow.patient_name,
-                    blood_group: requestRow.blood_group,
-                    units: requestRow.units,
-                    district: requestRow.district,
-                    upazila: requestRow.upazila,
-                    hospital_name: requestRow.hospital_name,
-                    urgency_level: requestRow.urgency_level,
-                    requester_id: requestRow.user_id,
-                    created_at: requestRow.created_at || new Date().toISOString()
-                }
-            }
-        });
-
-        if (error) {
-            console.error('District emergency alert invoke error:', error);
-            return;
-        }
-
-        console.log('District emergency alert sent:', data);
-    } catch (err) {
-        console.error('District emergency alert failed:', err);
-    }
-}
-
-function updateText() {
-    const t = dict[currentLang];
-    setText('menu-title', t.menuTitle);
-    setText('nav-dev', t.navDev);
-    setText('nav-leaderboard', t.navLeaderboard);
-    setText('theme-text', isDark ? 'Light Theme' : t.themeText);
-    setHTML('hero-title', t.heroTitle);
-    setText('hero-sub', t.heroSub);
-    setText('search-title', t.searchTitle);
-    setText('select-bg', t.selectBg);
-    setText('search-btn', t.searchBtn);
-    setHTML('donor-cta-title', t.donorCtaTitle);
-    setText('donor-cta-sub', t.donorCtaSub);
-    setText('donor-cta-btn', t.donorCtaBtn);
-    setHTML('emergency-title', t.emergencyTitle);
-    setText('emergency-sub', t.emergencySub);
-    setText('btn-emergency', t.btnEmergency);
-}
+window.toggleLanguage = function () {
+  return;
+};
 
 window.toggleMenu = function () {
-    const menu = document.getElementById('side-menu');
-    const overlay = document.getElementById('menu-overlay');
-    const body = document.body;
-    if (!menu || !overlay) return;
+  const menu = $('side-menu');
+  const overlay = $('menu-overlay');
+  if (!menu || !overlay) return;
 
-    if (menu.classList.contains('-translate-x-full')) {
-        menu.classList.remove('-translate-x-full');
-        overlay.classList.remove('hidden');
-        setTimeout(() => overlay.classList.add('opacity-100'), 10);
-        body.style.overflow = 'hidden';
-        menuOpen = true;
-    } else {
-        menu.classList.add('-translate-x-full');
-        overlay.classList.remove('opacity-100');
-        setTimeout(() => overlay.classList.add('hidden'), 300);
-        body.style.overflow = 'auto';
-        menuOpen = false;
-    }
+  if (menu.classList.contains('-translate-x-full')) {
+    menu.classList.remove('-translate-x-full');
+    overlay.classList.remove('hidden');
+    setTimeout(() => overlay.classList.add('opacity-100'), 10);
+    document.body.style.overflow = 'hidden';
+    menuOpen = true;
+  } else {
+    menu.classList.add('-translate-x-full');
+    overlay.classList.remove('opacity-100');
+    setTimeout(() => overlay.classList.add('hidden'), 300);
+    document.body.style.overflow = 'auto';
+    menuOpen = false;
+  }
 };
 
 window.toggleTheme = function () {
-    isDark = !isDark;
-    document.documentElement.classList.toggle('dark', isDark);
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    updateText();
-};
-
-window.toggleLanguage = function () { return; };
-
-window.getBadgeHTML = function (count) {
-    if (count >= 5) return `<span class="inline-flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 px-3 py-1 rounded-full text-[10px] font-black border border-amber-200 dark:border-amber-800 uppercase tracking-wider shadow-sm"><i class="fa-solid fa-award"></i> Super Hero</span>`;
-    if (count >= 3) return `<span class="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-[10px] font-black border border-slate-200 dark:border-slate-600 uppercase tracking-wider shadow-sm"><i class="fa-solid fa-medal"></i> Regular Donor</span>`;
-    if (count >= 1) return `<span class="inline-flex items-center gap-1.5 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 px-3 py-1 rounded-full text-[10px] font-black border border-orange-200 dark:border-orange-800 uppercase tracking-wider shadow-sm"><i class="fa-solid fa-certificate"></i> New Donor</span>`;
-    return '';
-};
-
-// ==========================================
-// 3. AUTHENTICATION
-// ==========================================
-window.loginWithGoogle = async function () {
-    const { error } = await supabaseClient.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-            redirectTo: window.location.origin + '/index.html',
-            queryParams: { prompt: 'select_account' }
-        }
-    });
-    if (error) alert('Error: ' + error.message);
-};
-
-window.handleLogin = async function (event) {
-    event.preventDefault();
-    const emailInput = event.target.querySelector('input[type="email"]');
-    const btn = event.target.querySelector('button[type="submit"]');
-    if (!emailInput || !btn) return;
-
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
-    btn.disabled = true;
-
-    const { error } = await supabaseClient.auth.signInWithOtp({
-        email: emailInput.value,
-        options: { emailRedirectTo: window.location.origin + '/index.html' }
-    });
-
-    if (error) {
-        alert('Error: ' + error.message);
-        btn.innerHTML = 'Send Magic Link';
-        btn.disabled = false;
-        return;
-    }
-
-    alert('Success! Check your email for the magic link.');
-    btn.innerHTML = '<i class="fa-solid fa-check"></i> Link Sent!';
-};
-
-window.handleLogout = async function () {
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) {
-        alert('Logout Error: ' + error.message);
-    } else {
-        window.location.href = 'index.html';
-    }
-};
-
-function isCooldownLocked(profile) {
-    if (!profile?.availability_locked || !profile?.cooldown_until) return false;
-    const untilTs = new Date(profile.cooldown_until).getTime();
-    return Number.isFinite(untilTs) && untilTs > Date.now();
-}
-
-function formatCooldownDateTime(value) {
-    if (!value) return '-';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString();
-}
-
-function getRemainingCooldownParts(value) {
-    if (!value) return null;
-    const diff = new Date(value).getTime() - Date.now();
-    if (diff <= 0 || Number.isNaN(diff)) return { days: 0, hours: 0, text: 'Ended' };
-    const totalHours = Math.ceil(diff / 3600000);
-    const days = Math.floor(totalHours / 24);
-    const hours = totalHours % 24;
-    const text = `${days} day(s) ${hours} hour(s) left`;
-    return { days, hours, text };
-}
-
-async function normalizeOwnAvailabilityLock(userId, profile) {
-    if (!profile) return null;
-    if (!profile.availability_locked || !profile.cooldown_until) return profile;
-
-    const untilTs = new Date(profile.cooldown_until).getTime();
-    if (!Number.isFinite(untilTs)) return profile;
-    if (untilTs > Date.now()) return profile;
-
-    const updated = {
-        ...profile,
-        is_available: true,
-        availability_locked: false,
-        cooldown_until: null,
-        cooldown_reason: null
-    };
-
-    const { error } = await supabaseClient
-        .from('donors')
-        .update({
-            is_available: true,
-            availability_locked: false,
-            cooldown_until: null,
-            cooldown_reason: null
-        })
-        .eq('user_id', userId);
-
-    if (error) {
-        console.error('Cooldown auto unlock failed:', error);
-        return profile;
-    }
-
-    return updated;
-}
-
-async function getSessionAndProfile() {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) return { session: null, profile: null };
-
-    const { data: profile } = await supabaseClient
-        .from('donors')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .maybeSingle();
-
-    const normalizedProfile = await normalizeOwnAvailabilityLock(session.user.id, profile || null);
-    return { session, profile: normalizedProfile || null };
-}
-
-supabaseClient.auth.onAuthStateChange((event) => {
-    if (event === 'SIGNED_IN') {
-        checkAuthState();
-        if (window.location.pathname.includes('login.html')) window.location.href = 'donor-profile.html';
-        setTimeout(() => setupPushNotifications(), 1500);
-    } else if (event === 'SIGNED_OUT') {
-        if (
-            window.location.pathname.includes('donor-profile.html') ||
-            window.location.pathname.includes('emergency-post.html') ||
-            window.location.pathname.includes('requester-dashboard.html')
-        ) {
-            window.location.href = 'index.html';
-        }
-    }
-});
-
-async function checkAuthState() {
-    const { session, profile } = await getSessionAndProfile();
-    const guestCta = document.getElementById('guest-cta-section');
-    const donorFeed = document.getElementById('donor-feed-section');
-    const menuCard = document.getElementById('menu-donor-card');
-    const menuLogoutBtn = document.getElementById('menu-logout-btn');
-
-    if (session) {
-        if (menuLogoutBtn) menuLogoutBtn.classList.remove('hidden');
-        if (profile && menuCard) {
-            menuCard.classList.remove('hidden');
-            setText('menu-user-name', profile.full_name || 'Donor');
-            setText('menu-user-bg', profile.blood_group || '--');
-            menuCard.onclick = () => window.location.href = `public-profile.html?id=${profile.user_id}`;
-            menuCard.classList.add('cursor-pointer', 'transition', 'active:scale-95', 'hover:opacity-90');
-        }
-        document.querySelectorAll('a[href="login.html"]').forEach(btn => btn.href = 'donor-profile.html');
-        if (guestCta) guestCta.classList.add('hidden');
-        if (donorFeed) {
-            donorFeed.classList.remove('hidden');
-            fetchUrgentRequests();
-        }
-        subscribePendingVerifications();
-    } else {
-        if (menuLogoutBtn) menuLogoutBtn.classList.add('hidden');
-        if (guestCta) guestCta.classList.remove('hidden');
-        if (donorFeed) donorFeed.classList.add('hidden');
-    }
-}
-
-// ==========================================
-// 4. SEARCH, POSTS, LOCATION
-// ==========================================
-window.submitEmergencyPost = async function (event) {
-    event.preventDefault();
-    const { session } = await getSessionAndProfile();
-
-    if (!session) {
-        alert('Please log in first!');
-        window.location.href = 'login.html';
-        return;
-    }
-
-    const btn = document.getElementById('submit-post-btn');
-    const originalText = btn ? btn.innerHTML : 'Post Request';
-    if (btn) {
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Posting...';
-        btn.disabled = true;
-    }
-
-    const district = document.getElementById('request-district')?.value || '';
-    const upazila = document.getElementById('request-upazila')?.value || '';
-
-    const payload = {
-        patient_name: document.getElementById('patient_name')?.value?.trim(),
-        blood_group: document.getElementById('blood_group')?.value,
-        units: parseInt(document.getElementById('units')?.value || '0', 10),
-        hospital_name: document.getElementById('hospital_name')?.value?.trim(),
-        contact_number: document.getElementById('contact_number')?.value?.trim(),
-        urgency_level: document.getElementById('urgency_level')?.value,
-        district,
-        upazila,
-        user_id: session.user.id
-    };
-
-    const { data: insertedRequest, error } = await supabaseClient
-        .from('blood_requests')
-        .insert([payload])
-        .select('*')
-        .single();
-
-    if (error) {
-        alert('Error: ' + error.message);
-        if (btn) {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }
-        return;
-    }
-
-    await triggerDistrictEmergencyAlert(insertedRequest);
-
-    alert('Your emergency request was posted successfully!');
-    window.location.href = 'all-requests.html';
-};
-
-window.fetchUrgentRequests = async function () {
-    const container = document.getElementById('urgent-requests-container');
-    if (!container) return;
-
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    const currentUserId = session?.user?.id || null;
-
-    let query = supabaseClient
-        .from('blood_requests')
-        .select('*')
-        .gte('created_at', getBloodPostCutoffISOString())
-        .order('created_at', { ascending: false });
-
-    if (currentUserId) query = query.neq('user_id', currentUserId);
-
-    const { data, error } = await query.limit(3);
-
-    const activeData = (data || []).filter(isBloodPostActive);
-
-    if (error || activeData.length === 0) {
-        container.innerHTML = '<p class="text-xs text-slate-500 text-center py-8 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-gray-200 dark:border-slate-700 font-bold">No urgent requests right now.</p>';
-        return;
-    }
-
-    let html = '';
-    for (const req of activeData) {
-        const postDate = req.created_at
-            ? new Date(req.created_at).toLocaleString('en-US', {
-                day: 'numeric',
-                month: 'short',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            })
-            : '';
-
-        const locationText = [req.upazila, req.district].filter(Boolean).join(', ');
-        html += `
-<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 flex justify-between items-center gap-3 transition active:scale-95">
-    <div class="min-w-0">
-        <div class="flex items-center gap-2 mb-1 flex-wrap">
-            <span class="bg-red-100 dark:bg-red-900/30 text-brand px-2 py-0.5 rounded text-[10px] font-black">${escapeHtml(req.blood_group || '--')}</span>
-            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter"><i class="fa-solid fa-hospital"></i> ${escapeHtml(req.hospital_name || 'Hospital')}</span>
-        </div>
-        <p class="font-bold text-sm text-slate-800 dark:text-white truncate">${escapeHtml(req.patient_name || 'Unknown Patient')} <span class="text-[10px] font-normal text-slate-500">(${escapeHtml(req.units || 0)} Bag)</span></p>
-        ${locationText ? `<p class="text-[10px] text-slate-400 truncate mt-0.5"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(locationText)}</p>` : ''}
-        <p class="text-[9px] text-slate-400 font-medium mt-0.5"><i class="fa-regular fa-clock"></i> ${escapeHtml(postDate)}</p>
-    </div>
-    <a href="tel:${escapeHtml(req.contact_number || '')}"
-       onclick="callRequesterFromPost(event, '${escapeJsString(req.contact_number || '')}', '${escapeJsString(req.user_id || '')}', '${escapeJsString(req.id || '')}', '${escapeJsString(req.patient_name || '')}')"
-       class="w-10 h-10 shrink-0 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-500 rounded-full flex items-center justify-center hover:bg-green-100 transition shadow-sm border border-green-100 dark:border-green-800/30">
-        <i class="fa-solid fa-phone"></i>
-    </a>
-</div>`;
-    }
-    container.innerHTML = html;
-};
-
-window.handleSearch = function () {
-    const bg = document.getElementById('blood-group-select')?.value;
-    if (!bg) {
-        alert('Please select a blood group first.');
-        return;
-    }
-    window.location.href = `search-results.html?bg=${encodeURIComponent(bg)}`;
-};
-
-window.detectLocation = function () {
-    const locBtn = document.getElementById('loc-btn');
-    if (locBtn) locBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading...';
-
-    if (!navigator.geolocation) {
-        if (locBtn) locBtn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-brand"></i>';
-        return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-        () => {
-            if (locBtn) {
-                locBtn.innerHTML = `<i class="fa-solid fa-check text-green-500"></i> Location Detected!`;
-            }
-        },
-        () => {
-            if (locBtn) locBtn.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-500"></i>`;
-            alert('Please allow location access.');
-        }
-    );
+  isDark = !isDark;
+  document.documentElement.classList.toggle('dark', isDark);
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  updateEnglishUi();
 };
 
 window.showDeveloper = function () {
-    window.location.href = 'developer.html';
-};
-window.closeDeveloper = function () {
-    const modal = document.getElementById('dev-modal');
-    if (modal) modal.classList.add('hidden');
+  window.location.href = 'developer.html';
 };
 
-// ==========================================
-// 5. RECORD DONATION BUTTON
-// ==========================================
-window.recordNewDonation = async function () {
-    if (!confirm('Did you donate blood today? Please confirm.')) return;
+window.closeDeveloper = function () {};
 
-    const { session } = await getSessionAndProfile();
-    if (!session) {
-        alert('Please login first!');
-        return;
+window.loginWithGoogle = async function () {
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${window.location.origin}/index.html`,
+      queryParams: { prompt: 'select_account' }
     }
+  });
 
-    const btn = document.getElementById('record-donation-btn');
-    if (btn) {
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
-        btn.disabled = true;
-    }
-
-    try {
-        const { data: profile, error: fetchErr } = await supabaseClient
-            .from('donors')
-            .select('total_donations')
-            .eq('user_id', session.user.id)
-            .maybeSingle();
-
-        if (fetchErr) throw fetchErr;
-
-        const currentTotal = profile?.total_donations || 0;
-        const today = new Date().toISOString().split('T')[0];
-
-        const cooldownUntil = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-        const { error: updateErr } = await supabaseClient
-            .from('donors')
-            .update({
-                total_donations: currentTotal + 1,
-                last_donation_date: today,
-                is_available: false,
-                availability_locked: true,
-                cooldown_until: cooldownUntil,
-                cooldown_reason: `You donated blood on ${today}. Cooldown active for 3 months.`
-            })
-            .eq('user_id', session.user.id);
-
-        if (updateErr) throw updateErr;
-
-        alert('Thank you! Donation count updated.');
-        window.location.reload();
-    } catch (error) {
-        alert('Error: ' + error.message);
-        if (btn) {
-            btn.innerHTML = '<i class="fa-solid fa-droplet"></i> I Donated Today';
-            btn.disabled = false;
-        }
-    }
+  if (error) alert(`Login failed: ${error.message}`);
 };
 
-// ==========================================
-// 6. PROFILE PAGES & FORM INIT
-// ==========================================
-document.addEventListener('DOMContentLoaded', async () => {
-    updateText();
-    await registerServiceWorker();
-    await checkAuthState();
-    listenForServiceWorkerMessages();
-    await processVerificationFromURL();
+window.handleLogin = async function (event) {
+  event.preventDefault();
+  const form = event.target;
+  const emailInput = form.querySelector('input[type="email"]');
+  const button = form.querySelector('button[type="submit"]');
+  if (!emailInput) return;
 
-    const { session, profile } = await getSessionAndProfile();
-    const user = session?.user || null;
+  const original = button ? button.innerHTML : '';
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+  }
 
-    let currentProfileData = profile;
-    let newUploadedAvatarUrl = null;
+  const { error } = await supabaseClient.auth.signInWithOtp({
+    email: emailInput.value.trim(),
+    options: { emailRedirectTo: `${window.location.origin}/index.html` }
+  });
 
-    const donorForm = document.getElementById('donorForm');
-    const viewName = document.getElementById('view-name');
-    const availToggleBtn = document.getElementById('isAvailable');
-    const statusBanner = document.getElementById('donor-status-banner');
-
-    function updateStatusBanner() {
-        if (!statusBanner) return;
-
-        statusBanner.classList.remove('hidden');
-        const isComplete = currentProfileData &&
-            currentProfileData.full_name &&
-            currentProfileData.blood_group &&
-            currentProfileData.phone_number &&
-            currentProfileData.district &&
-            currentProfileData.upazila;
-
-        const cooldownActive = isCooldownLocked(currentProfileData);
-        const isAvail = currentProfileData && currentProfileData.is_available !== false;
-
-        if (availToggleBtn) {
-            availToggleBtn.disabled = cooldownActive;
-            availToggleBtn.checked = cooldownActive ? false : isAvail;
-        }
-
-        if (cooldownActive) {
-            const remaining = getRemainingCooldownParts(currentProfileData.cooldown_until);
-            const reason = currentProfileData.cooldown_reason || 'You donated blood recently. Donor availability is temporarily locked.';
-            statusBanner.className = 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 p-4 rounded-xl text-left font-bold text-sm border border-blue-200 dark:border-blue-800 mb-4 block transition';
-            statusBanner.innerHTML = `
-                <div class="flex items-start gap-2">
-                    <i class="fa-solid fa-hourglass-half mt-0.5"></i>
-                    <div class="space-y-1">
-                        <div>Donation cooldown is active</div>
-                        <div class="text-xs font-medium opacity-90">${escapeHtml(reason)}</div>
-                        <div class="text-xs font-medium opacity-90">Available again: ${escapeHtml(formatCooldownDateTime(currentProfileData.cooldown_until))}</div>
-                        <div class="text-xs font-medium opacity-90">${escapeHtml(remaining?.text || '')}</div>
-                    </div>
-                </div>`;
-            return;
-        }
-
-        if (isComplete && isAvail) {
-            statusBanner.className = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 p-3 rounded-xl text-center font-bold text-sm border border-green-200 dark:border-green-800 mb-4 block transition';
-            statusBanner.innerHTML = '<i class="fa-solid fa-circle-check"></i> You are now an Active Donor!';
-        } else {
-            statusBanner.className = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 p-3 rounded-xl text-center font-bold text-sm border border-amber-200 dark:border-amber-800 mb-4 block transition';
-            statusBanner.innerHTML = !isComplete
-                ? '<i class="fa-solid fa-triangle-exclamation"></i> Profile incomplete. You are not a donor.'
-                : '<i class="fa-solid fa-bell-slash"></i> Availability OFF. You are not a donor.';
-        }
+  if (error) {
+    alert(`Login failed: ${error.message}`);
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = original || 'Send Magic Link';
     }
+    return;
+  }
 
-    if (availToggleBtn) {
-        availToggleBtn.addEventListener('change', async function () {
-            if (!user) {
-                alert('Please log in first!');
-                this.checked = false;
-                return;
-            }
+  alert('Magic link sent. Please check your email.');
+  if (button) button.innerHTML = '<i class="fa-solid fa-check"></i> Link Sent!';
+};
 
-            if (isCooldownLocked(currentProfileData)) {
-                this.checked = false;
-                updateStatusBanner();
-                alert(`Availability cannot be turned on now. Try again after ${formatCooldownDateTime(currentProfileData.cooldown_until)}.`);
-                return;
-            }
+window.handleLogout = async function () {
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) {
+    alert(`Logout failed: ${error.message}`);
+    return;
+  }
+  window.location.href = 'index.html';
+};
 
-            const isAvail = this.checked;
-            const { error } = await supabaseClient
-                .from('donors')
-                .update({ is_available: isAvail })
-                .eq('user_id', user.id);
-
-            if (error) {
-                this.checked = !isAvail;
-                alert('Failed to update status.');
-                return;
-            }
-
-            if (!currentProfileData) currentProfileData = {};
-            currentProfileData.is_available = isAvail;
-            updateStatusBanner();
-        });
+supabaseClient.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_IN') checkAuthState();
+  if (event === 'SIGNED_OUT') {
+    if (
+      window.location.pathname.includes('donor-profile.html') ||
+      window.location.pathname.includes('emergency-post.html') ||
+      window.location.pathname.includes('requester-dashboard.html')
+    ) {
+      window.location.href = 'index.html';
     }
-
-    if (currentProfileData) {
-        if (availToggleBtn) availToggleBtn.checked = currentProfileData.is_available !== false;
-        updateStatusBanner();
-
-        const badgeContainer = document.getElementById('view-badge-container');
-        if (badgeContainer) badgeContainer.innerHTML = getBadgeHTML(currentProfileData.total_donations || 0);
-
-        if (viewName && document.getElementById('view-phone')) {
-            viewName.innerHTML = `${escapeHtml(currentProfileData.full_name || 'Donor')} <i class="fa-solid fa-circle-check text-blue-500 text-sm"></i>`;
-            setText('view-bg', currentProfileData.blood_group || 'N/A');
-            setText('view-phone', currentProfileData.phone_number || '-');
-            setText('view-location', (currentProfileData.district && currentProfileData.upazila) ? `${currentProfileData.upazila}, ${currentProfileData.district}` : 'Location not set');
-            setText('view-last-donation', currentProfileData.last_donation_date || '-');
-
-            if (currentProfileData.avatar_url && document.getElementById('view-avatar-container')) {
-                document.getElementById('view-avatar-container').innerHTML = `<img src="${escapeHtml(currentProfileData.avatar_url)}" class="w-full h-full object-cover">`;
-            }
-
-            const shareBtn = document.getElementById('share-my-profile-btn');
-            if (shareBtn && user) {
-                shareBtn.onclick = () => {
-                    const profileUrl = window.location.origin + '/public-profile.html?id=' + user.id;
-                    if (navigator.share && window.isSecureContext) {
-                        navigator.share({ title: 'Blood Donor Profile', text: 'I am a blood donor!', url: profileUrl }).catch(console.error);
-                    } else {
-                        prompt('Copy your profile link:', profileUrl);
-                    }
-                };
-            }
-        }
-
-        if (donorForm) {
-            const fullName = document.getElementById('fullName');
-            const bloodGroup = document.getElementById('bloodGroup');
-            const phoneNumber = document.getElementById('phoneNumber');
-            const lastDonation = document.getElementById('lastDonation');
-            const bio = document.getElementById('bio');
-            const avatarPreview = document.getElementById('edit-avatar-preview');
-
-            if (fullName) fullName.value = currentProfileData.full_name || '';
-            if (bloodGroup) bloodGroup.value = currentProfileData.blood_group || '';
-            if (phoneNumber) phoneNumber.value = currentProfileData.phone_number || '';
-            if (lastDonation) lastDonation.value = currentProfileData.last_donation_date || '';
-            if (bio) bio.value = currentProfileData.bio || '';
-            if (avatarPreview && currentProfileData.avatar_url) avatarPreview.src = currentProfileData.avatar_url;
-        }
-    } else if (viewName && statusBanner) {
-        updateStatusBanner();
-    }
-
-    await initLinkedLocationSelects({
-        districtId: 'district',
-        upazilaId: 'upazila',
-        defaultDistrict: currentProfileData?.district || '',
-        defaultUpazila: currentProfileData?.upazila || ''
-    });
-
-    await initLinkedLocationSelects({
-        districtId: 'request-district',
-        upazilaId: 'request-upazila'
-    });
-
-    const avatarInput = document.getElementById('avatarUpload');
-    if (avatarInput) {
-        avatarInput.addEventListener('change', async (e) => {
-            const file = e.target.files?.[0];
-            if (!file || !user) return;
-
-            const statusText = document.getElementById('upload-status');
-            if (statusText) statusText.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-brand"></i> Optimizing...';
-
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = function (event) {
-                const img = new Image();
-                img.src = event.target.result;
-                img.onload = async function () {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    const MAX_SIZE = 400;
-
-                    let width = img.width;
-                    let height = img.height;
-
-                    if (width > height) {
-                        if (width > MAX_SIZE) {
-                            height *= MAX_SIZE / width;
-                            width = MAX_SIZE;
-                        }
-                    } else if (height > MAX_SIZE) {
-                        width *= MAX_SIZE / height;
-                        height = MAX_SIZE;
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    canvas.toBlob(async (blob) => {
-                        if (!blob) return;
-                        if (statusText) statusText.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-brand"></i> Uploading...';
-
-                        const fileName = `public/${user.id}-${Date.now()}.jpg`;
-                        const { error } = await supabaseClient.storage
-                            .from('avatars')
-                            .upload(fileName, blob, { upsert: true });
-
-                        if (error) {
-                            if (statusText) statusText.innerHTML = `<span class="text-red-500 font-bold text-xs">Failed: ${escapeHtml(error.message)}</span>`;
-                            return;
-                        }
-
-                        const { data } = supabaseClient.storage.from('avatars').getPublicUrl(fileName);
-                        newUploadedAvatarUrl = data.publicUrl;
-                        const preview = document.getElementById('edit-avatar-preview');
-                        if (preview) preview.src = data.publicUrl;
-                        if (statusText) statusText.innerHTML = '<span class="text-green-500 font-bold text-xs">Ready to save!</span>';
-                    }, 'image/jpeg', 0.8);
-                };
-            };
-        });
-    }
-
-    if (donorForm) {
-        donorForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const btn = document.getElementById('btn-save');
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
-            }
-
-            if (!user) {
-                alert('Please log in first!');
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = 'Save & Return';
-                }
-                return;
-            }
-
-            const payload = {
-                user_id: user.id,
-                full_name: document.getElementById('fullName')?.value?.trim() || null,
-                blood_group: document.getElementById('bloodGroup')?.value || null,
-                district: document.getElementById('district')?.value || null,
-                upazila: document.getElementById('upazila')?.value || null,
-                phone_number: document.getElementById('phoneNumber')?.value?.trim() || null,
-                last_donation_date: document.getElementById('lastDonation')?.value || currentProfileData?.last_donation_date || null,
-                total_donations: currentProfileData?.total_donations || 0,
-                bio: document.getElementById('bio')?.value || null,
-                avatar_url: newUploadedAvatarUrl || currentProfileData?.avatar_url || null,
-                is_available: currentProfileData?.is_available ?? true,
-                availability_locked: currentProfileData?.availability_locked ?? false,
-                cooldown_until: currentProfileData?.cooldown_until || null,
-                cooldown_reason: currentProfileData?.cooldown_reason || null
-            };
-
-            const { error } = await supabaseClient
-                .from('donors')
-                .upsert(payload, { onConflict: 'user_id' });
-
-            if (error) {
-                alert('Error: ' + error.message);
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = 'Save & Return';
-                }
-                return;
-            }
-
-            window.location.href = 'donor-profile.html';
-        });
-    }
-
-    setTimeout(() => setupPushNotifications(), 2000);
-    setTimeout(() => checkPendingVerifications(), 1200);
+  }
 });
 
+async function checkAuthState() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const guestCta = $('guest-cta-section');
+  const donorFeed = $('donor-feed-section');
+  const menuCard = $('menu-donor-card');
+  const navProfileIcon = $('nav-profile-icon');
+  const menuLogoutBtn = $('menu-logout-btn');
 
-function getActiveDonorLockInfo(profile) {
-    if (!profile?.availability_locked || !profile?.cooldown_until) {
-        return { active: false, daysRemaining: 0, profile: profile || null };
-    }
-    const parts = getRemainingCooldownParts(profile.cooldown_until);
-    return {
-        active: isCooldownLocked(profile),
-        daysRemaining: parts?.days || 0,
-        profile: profile || null,
-        until: profile.cooldown_until,
-        reason: profile.cooldown_reason || ''
-    };
-}
+  if (session) {
+    if (navProfileIcon) navProfileIcon.href = 'donor-profile.html';
+    if (menuLogoutBtn) menuLogoutBtn.classList.remove('hidden');
 
-function showCooldownAlert(profileOrDate) {
-    const untilText = formatCooldownDateTime(profileOrDate?.cooldown_until || profileOrDate || '');
-    const msg = `This donor is in cooldown now. They will be available again after ${untilText}.`;
-    alert(msg);
-}
+    const { data: profile } = await supabaseClient
+      .from('donors')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
 
-// ==========================================
-// 7. TWO-WAY VERIFICATION FLOW
-// ==========================================
-
-async function insertPendingVerification(row) {
-    try {
-        const cleanRow = {
-            donor_id: row.donor_id || null,
-            requester_id: row.requester_id || null,
-            donor_name: row.donor_name || null,
-            requester_name: row.requester_name || null,
-            donor_phone: row.donor_phone || null,
-            request_id: row.request_id || null,
-            source: row.source || 'call',
-            status: 'pending',
-            metadata: row.metadata || {}
-        };
-
-        if (!cleanRow.donor_id || !cleanRow.requester_id || cleanRow.donor_id === cleanRow.requester_id) {
-            return { ok: false, reason: 'invalid' };
-        }
-
-        let duplicateQuery = supabaseClient
-            .from('pending_verifications')
-            .select('*')
-            .eq('donor_id', cleanRow.donor_id)
-            .eq('requester_id', cleanRow.requester_id)
-            .eq('source', cleanRow.source)
-            .eq('status', 'pending')
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-        duplicateQuery = cleanRow.request_id
-            ? duplicateQuery.eq('request_id', cleanRow.request_id)
-            : duplicateQuery.is('request_id', null);
-
-        const { data: existingPending, error: duplicateError } = await duplicateQuery.maybeSingle();
-        if (duplicateError) {
-            console.error('Verification duplicate check error:', duplicateError);
-        }
-        if (existingPending) {
-            return { ok: true, duplicate: true, data: existingPending };
-        }
-
-        const { data, error } = await supabaseClient
-            .from('pending_verifications')
-            .insert([cleanRow])
-            .select('*')
-            .single();
-
-        if (error) {
-            console.error('Verification insert error:', error);
-            return { ok: false, reason: 'insert_error', error };
-        }
-
-        return { ok: true, duplicate: false, data };
-    } catch (err) {
-        console.error('Verification insert exception:', err);
-        return { ok: false, reason: 'exception', error: err };
-    }
-}
-
-
-window.callDonorForDonation = async function (event, phoneNumber, donorId, donorName) {
-    if (event) event.preventDefault();
-
-    try {
-        const { session, profile } = await getSessionAndProfile();
-
-        if (session && donorId && session.user.id !== donorId) {
-            const { data: targetDonor, error: donorError } = await supabaseClient
-                .from('donors')
-                .select('user_id, availability_locked, cooldown_until, cooldown_reason, is_available')
-                .eq('user_id', donorId)
-                .maybeSingle();
-            if (donorError) throw donorError;
-
-            if (isCooldownLocked(targetDonor) || targetDonor?.is_available === false) {
-                showCooldownAlert(targetDonor);
-                return;
-            }
-
-            await insertPendingVerification({
-                donor_id: donorId,
-                requester_id: session.user.id,
-                donor_name: donorName || null,
-                requester_name: profile?.full_name || session.user.email || 'Requester',
-                donor_phone: phoneNumber || null,
-                source: 'donor_search',
-                metadata: { phone_number: phoneNumber || null }
-            });
-        }
-    } catch (err) {
-        console.error('callDonorForDonation error:', err);
+    if (profile && menuCard) {
+      menuCard.classList.remove('hidden');
+      setText('menu-user-name', profile.full_name || 'Donor');
+      setText('menu-user-bg', profile.blood_group || '--');
+      menuCard.onclick = () => {
+        window.location.href = `public-profile.html?id=${profile.user_id}`;
+      };
+      menuCard.classList.add('cursor-pointer', 'transition', 'active:scale-95', 'hover:opacity-90');
     }
 
-    window.location.href = `tel:${phoneNumber}`;
+    document.querySelectorAll('a[href="login.html"]').forEach((link) => {
+      link.href = 'donor-profile.html';
+    });
+
+    if (guestCta) guestCta.classList.add('hidden');
+    if (donorFeed) {
+      donorFeed.classList.remove('hidden');
+      fetchUrgentRequests();
+    }
+    return;
+  }
+
+  if (navProfileIcon) navProfileIcon.href = 'login.html';
+  if (menuLogoutBtn) menuLogoutBtn.classList.add('hidden');
+  if (guestCta) guestCta.classList.remove('hidden');
+  if (donorFeed) donorFeed.classList.add('hidden');
+}
+
+async function autoUnlockCooldown(userId, profile) {
+  if (!profile?.availability_locked || !profile?.cooldown_until) return profile;
+  const cooldownTime = new Date(profile.cooldown_until).getTime();
+  if (Number.isNaN(cooldownTime) || cooldownTime > Date.now()) return profile;
+
+  const payload = {
+    is_available: true,
+    availability_locked: false,
+    cooldown_until: null,
+    cooldown_reason: null
+  };
+
+  const { error } = await supabaseClient.from('donors').update(payload).eq('user_id', userId);
+  if (error) return profile;
+  return { ...profile, ...payload };
+}
+
+function renderCooldownBanner(profile) {
+  const statusBanner = $('donor-status-banner');
+  if (!statusBanner || !profile) return;
+
+  const isComplete = !!(profile.full_name && profile.blood_group && profile.phone_number && profile.district && profile.upazila);
+  const cooldownActive = isCooldownActive(profile);
+  const isAvail = profile.is_available !== false && !cooldownActive;
+
+  statusBanner.classList.remove('hidden');
+
+  if (cooldownActive) {
+    const remaining = formatRemaining(new Date(profile.cooldown_until).getTime() - Date.now());
+    statusBanner.className = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 p-3 rounded-xl text-center font-bold text-sm border border-amber-200 dark:border-amber-800 mb-4 block transition';
+    statusBanner.innerHTML = `<i class="fa-solid fa-hourglass-half"></i> Donation cooldown active until ${formatDateTime(profile.cooldown_until)}<div class="text-xs font-semibold mt-1">${profile.cooldown_reason || 'You donated recently.'} · ${remaining}</div>`;
+    return;
+  }
+
+  if (isComplete && isAvail) {
+    statusBanner.className = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 p-3 rounded-xl text-center font-bold text-sm border border-green-200 dark:border-green-800 mb-4 block transition';
+    statusBanner.innerHTML = '<i class="fa-solid fa-circle-check"></i> You are available for donation.';
+    return;
+  }
+
+  statusBanner.className = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 p-3 rounded-xl text-center font-bold text-sm border border-amber-200 dark:border-amber-800 mb-4 block transition';
+  statusBanner.innerHTML = !isComplete
+    ? '<i class="fa-solid fa-triangle-exclamation"></i> Profile incomplete. You are not listed as an active donor.'
+    : '<i class="fa-solid fa-bell-slash"></i> Availability is currently turned off.';
+}
+
+function updateNotificationStatusUi(subscriptionExists = false) {
+  const badge = $('notification-row-badge');
+  const subtext = $('notification-subtext');
+  if (badge) {
+    badge.className = subscriptionExists
+      ? 'inline-flex items-center px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-[11px] font-bold text-green-700 dark:text-green-300'
+      : 'inline-flex items-center px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300';
+    badge.textContent = subscriptionExists ? 'On' : 'Off';
+  }
+  if (subtext) {
+    subtext.textContent = subscriptionExists
+      ? 'Emergency alerts are enabled for this device.'
+      : 'Turn on alerts for emergency requests in your area.';
+  }
+}
+
+function createNotificationSheet() {
+  if ($('notification-sheet-overlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'notification-sheet-overlay';
+  overlay.className = 'fixed inset-0 bg-black/50 hidden items-end justify-center z-[70] backdrop-blur-sm p-4';
+  overlay.innerHTML = `
+    <div class="w-full max-w-md bg-white dark:bg-slate-800 rounded-[2rem] p-5 shadow-2xl border border-gray-100 dark:border-slate-700">
+      <div class="w-12 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 mx-auto mb-5"></div>
+      <div class="flex items-start gap-4">
+        <div class="w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-900/20 text-brand flex items-center justify-center border border-red-100 dark:border-red-900/30">
+          <i class="fa-solid fa-bell"></i>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-lg font-black text-slate-800 dark:text-white">Enable Emergency Alerts</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Get notified when urgent blood requests match your area.</p>
+        </div>
+      </div>
+      <div class="mt-5 flex gap-3">
+        <button type="button" onclick="closeNotificationSheet()" class="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 py-3.5 rounded-2xl font-bold">Not Now</button>
+        <button id="enable-alerts-btn" type="button" onclick="enableAlertsFromSheet()" class="flex-1 bg-brand text-white py-3.5 rounded-2xl font-bold hover:bg-red-700 transition">Enable Alerts</button>
+      </div>
+    </div>
+  `;
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) closeNotificationSheet();
+  });
+  document.body.appendChild(overlay);
+}
+
+window.openNotificationSheet = function () {
+  createNotificationSheet();
+  const overlay = $('notification-sheet-overlay');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+    overlay.classList.add('flex');
+  }
 };
 
-window.initiateCallTracking = window.callDonorForDonation;
-
-
-window.callRequesterFromPost = async function (event, phoneNumber, requesterId, requestId, patientName) {
-    if (event) event.preventDefault();
-
-    try {
-        const { session, profile } = await getSessionAndProfile();
-
-        if (session && requesterId && session.user.id !== requesterId) {
-            await insertPendingVerification({
-                donor_id: session.user.id,
-                requester_id: requesterId,
-                donor_name: profile?.full_name || session.user.email || 'Donor',
-                requester_name: patientName || 'Requester',
-                donor_phone: profile?.phone_number || null,
-                request_id: requestId ? Number(requestId) : null,
-                source: 'emergency_post',
-                metadata: { phone_number: phoneNumber || null }
-            });
-        }
-    } catch (err) {
-        console.error('callRequesterFromPost error:', err);
-    }
-
-    window.location.href = `tel:${phoneNumber}`;
+window.closeNotificationSheet = function () {
+  const overlay = $('notification-sheet-overlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.classList.remove('flex');
+  }
 };
-
-async function checkPendingVerifications() {
-    const { session } = await getSessionAndProfile();
-    if (!session) return;
-
-    const { data: pending, error } = await supabaseClient
-        .from('pending_verifications')
-        .select('*')
-        .eq('requester_id', session.user.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-    if (error) {
-        console.error('Pending verification read error:', error);
-        return;
-    }
-
-    if (pending) showVerificationModal(pending);
-}
-
-function showVerificationModal(data) {
-    if (!data || document.getElementById('fixed-noti-overlay')) return;
-
-    const donorText = escapeHtml(data.donor_name || 'a donor');
-    const div = document.createElement('div');
-    div.id = 'fixed-noti-overlay';
-    div.className = 'fixed inset-0 bg-slate-900/95 z-[9999] flex items-center justify-center p-6';
-    div.innerHTML = `
-        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl text-center max-w-sm w-full shadow-2xl border border-slate-100 dark:border-slate-700">
-            <h3 class="text-lg font-black mb-2 text-slate-800 dark:text-white">Did you receive blood?</h3>
-            <p class="text-sm text-slate-500 dark:text-slate-300 mb-6 leading-relaxed">Did you receive blood today from <b>${donorText}</b>?</p>
-            <button onclick="handleRequesterVerification('${escapeJsString(data.id)}', true)" class="w-full bg-brand text-white py-4 rounded-2xl font-black mb-3 transition hover:bg-red-700">Yes, I received it</button>
-            <button onclick="handleRequesterVerification('${escapeJsString(data.id)}', false)" class="w-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-4 rounded-2xl font-bold transition hover:bg-slate-200 dark:hover:bg-slate-600">No, I did not receive it</button>
-        </div>`;
-    document.body.appendChild(div);
-}
-
-
-async function finalizeVerification(verificationId, status) {
-    const { data: pending, error: pendingError } = await supabaseClient
-        .from('pending_verifications')
-        .select('*')
-        .eq('id', verificationId)
-        .maybeSingle();
-
-    if (pendingError) throw pendingError;
-    if (!pending) return { ok: false, reason: 'missing' };
-    if (pending.status && pending.status !== 'pending') {
-        return { ok: false, reason: 'already_processed', status: pending.status };
-    }
-
-    if (status === 'verified' && pending.donor_id) {
-        const { data: donorProfile, error: donorError } = await supabaseClient
-            .from('donors')
-            .select('total_donations, availability_locked, cooldown_until, cooldown_reason')
-            .eq('user_id', pending.donor_id)
-            .maybeSingle();
-
-        if (donorError) throw donorError;
-
-        if (isCooldownLocked(donorProfile)) {
-            const lockInfo = getActiveDonorLockInfo(donorProfile);
-            const { error: blockError } = await supabaseClient
-                .from('pending_verifications')
-                .update({
-                    status: 'cooldown_blocked',
-                    responded_at: new Date().toISOString(),
-                    metadata: { ...(pending.metadata || {}), cooldown_until: donorProfile?.cooldown_until || null }
-                })
-                .eq('id', verificationId)
-                .eq('status', 'pending');
-            if (blockError) throw blockError;
-            return { ok: false, reason: 'cooldown', until: donorProfile?.cooldown_until || null, daysRemaining: lockInfo.daysRemaining };
-        }
-
-        const totalDonations = donorProfile?.total_donations || 0;
-        const now = new Date();
-        const todayDate = now.toISOString().split('T')[0];
-        const cooldownUntil = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
-        const cooldownReason = `You donated blood on ${todayDate}. Cooldown active for 3 months.`;
-
-        const { error: updatePendingError } = await supabaseClient
-            .from('pending_verifications')
-            .update({
-                status,
-                responded_at: new Date().toISOString()
-            })
-            .eq('id', verificationId)
-            .eq('status', 'pending');
-
-        if (updatePendingError) throw updatePendingError;
-
-        const { error: updateDonorError } = await supabaseClient
-            .from('donors')
-            .update({
-                total_donations: totalDonations + 1,
-                last_donation_date: todayDate,
-                is_available: false,
-                availability_locked: true,
-                cooldown_until: cooldownUntil,
-                cooldown_reason: cooldownReason
-            })
-            .eq('user_id', pending.donor_id);
-
-        if (updateDonorError) throw updateDonorError;
-        return { ok: true, reason: 'verified' };
-    }
-
-    const { error: updatePendingError } = await supabaseClient
-        .from('pending_verifications')
-        .update({
-            status,
-            responded_at: new Date().toISOString()
-        })
-        .eq('id', verificationId)
-        .eq('status', 'pending');
-
-    if (updatePendingError) throw updatePendingError;
-    return { ok: true, reason: status };
-}
-
-
-window.handleRequesterVerification = async function (verificationId, approved) {
-    const overlay = document.getElementById('fixed-noti-overlay');
-    if (overlay) overlay.style.opacity = '0.6';
-
-    try {
-        const result = await finalizeVerification(verificationId, approved ? 'verified' : 'rejected');
-        if (result?.reason === 'cooldown') {
-            alert(`This donor is still in the 3-month cooldown. Donation was not counted. Try again after ${result.daysRemaining} day(s).`);
-        } else if (result?.reason === 'already_processed') {
-            alert('This verification was already processed.');
-        }
-        window.location.reload();
-    } catch (err) {
-        console.error('handleRequesterVerification error:', err);
-        alert('Verification update failed.');
-        if (overlay) overlay.style.opacity = '1';
-    }
-};
-
-
-async function processVerificationFromURL() {
-    const params = new URLSearchParams(window.location.search);
-    const verifyStatus = params.get('verify');
-    const verifyId = params.get('verifyId') || params.get('id');
-
-    if (!verifyStatus || !verifyId) return;
-
-    try {
-        const result = await finalizeVerification(verifyId, verifyStatus);
-        if (result?.reason === 'cooldown') {
-            alert(`This donor is still in the 3-month cooldown. Donation was not counted.`);
-        } else if (result?.reason === 'already_processed') {
-            alert('This verification was already processed.');
-        } else {
-            alert(verifyStatus === 'verified' ? 'Thank you! Blood receipt has been confirmed.' : 'Verification updated.');
-        }
-    } catch (err) {
-        console.error('processVerificationFromURL error:', err);
-    }
-
-    window.history.replaceState({}, document.title, window.location.pathname);
-}
-
-async function subscribePendingVerifications() {
-    const { session } = await getSessionAndProfile();
-    if (!session || pendingRealtimeChannel) return;
-
-    pendingRealtimeChannel = supabaseClient
-        .channel(`pending-verifications-${session.user.id}`)
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'pending_verifications',
-                filter: `requester_id=eq.${session.user.id}`
-            },
-            (payload) => {
-                if (payload?.new?.status === 'pending') {
-                    showVerificationModal(payload.new);
-                }
-            }
-        )
-        .subscribe();
-}
-
-// ==========================================
-// 8. PUSH NOTIFICATIONS & SERVICE WORKER
-// ==========================================
-const publicVapidKey = 'BPT3FXeFUxI6ANp9DjHLzBVftJQzoComjKwSMPB2MGGWJ1nsQNZqND2RWpxQrZ6nUUyCjBdt_pP9bk8LaUNDw1A';
 
 function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 }
 
-async function registerServiceWorker() {
-    if (!('serviceWorker' in navigator)) return;
-    try {
-        await navigator.serviceWorker.register('sw.js');
-        await navigator.serviceWorker.ready;
-    } catch (err) {
-        console.error('Service worker registration failed:', err);
-    }
-}
-
-function listenForServiceWorkerMessages() {
-    if (!('serviceWorker' in navigator)) return;
-
-    navigator.serviceWorker.addEventListener('message', async (event) => {
-        const message = event.data;
-        if (!message || message.type !== 'VERIFICATION_UPDATE') return;
-
-        try {
-            await finalizeVerification(message.id, message.status);
-            window.location.reload();
-        } catch (err) {
-            console.error('SW message verification update failed:', err);
-        }
-    });
+async function ensureServiceWorker() {
+  if (!('serviceWorker' in navigator)) return null;
+  const registration = await navigator.serviceWorker.register('/sw.js');
+  return navigator.serviceWorker.ready || registration;
 }
 
 window.setupPushNotifications = async function () {
-    const { session } = await getSessionAndProfile();
-    if (!session) return;
-    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) {
+    alert('Please log in first.');
+    return false;
+  }
+
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert('This browser does not support notifications.');
+    return false;
+  }
+
+  if (Notification.permission === 'denied') {
+    alert('Notifications are blocked in this browser. Please allow notifications in site settings.');
+    return false;
+  }
+
+  const registration = await ensureServiceWorker();
+  if (!registration) {
+    alert('Service worker registration failed.');
+    return false;
+  }
+
+  const { data: donorRow } = await supabaseClient
+    .from('donors')
+    .select('push_subscription')
+    .eq('user_id', session.user.id)
+    .maybeSingle();
+
+  let subscription = await registration.pushManager.getSubscription();
+
+  if (!subscription && !donorRow?.push_subscription) {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      alert('Notification permission was not granted.');
+      updateNotificationStatusUi(false);
+      return false;
+    }
+  }
+
+  subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+    });
+  }
+
+  const { error } = await supabaseClient
+    .from('donors')
+    .update({ push_subscription: subscription })
+    .eq('user_id', session.user.id);
+
+  if (error) {
+    alert(`Notification setup failed: ${error.message}`);
+    updateNotificationStatusUi(false);
+    return false;
+  }
+
+  updateNotificationStatusUi(true);
+  return true;
+};
+
+window.enableAlertsFromSheet = async function () {
+  const btn = $('enable-alerts-btn');
+  const original = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enabling...';
+  }
+
+  const ok = await window.setupPushNotifications();
+
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = original || 'Enable Alerts';
+  }
+
+  if (ok) {
+    closeNotificationSheet();
+    alert('Emergency alerts enabled.');
+  }
+};
+
+async function syncNotificationStatusForCurrentUser() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) {
+    updateNotificationStatusUi(false);
+    return;
+  }
+
+  const { data } = await supabaseClient
+    .from('donors')
+    .select('push_subscription')
+    .eq('user_id', session.user.id)
+    .maybeSingle();
+
+  updateNotificationStatusUi(!!data?.push_subscription);
+}
+
+window.submitEmergencyPost = async function (event) {
+  event.preventDefault();
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) {
+    alert('Please log in first.');
+    window.location.href = 'login.html';
+    return;
+  }
+
+  const btn = $('submit-post-btn') || event.target.querySelector('button[type="submit"]');
+  const original = btn ? btn.innerHTML : '';
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Posting...';
+  }
+
+  const payload = {
+    patient_name: $('patient_name')?.value?.trim() || '',
+    blood_group: $('blood_group')?.value || '',
+    units: parseInt($('units')?.value || '0', 10),
+    hospital_name: $('hospital_name')?.value?.trim() || '',
+    district: $('district')?.value || null,
+    upazila: $('upazila')?.value || null,
+    contact_number: $('contact_number')?.value?.trim() || '',
+    urgency_level: $('urgency_level')?.value || 'normal',
+    additional_note: $('additional_note')?.value?.trim() || null,
+    user_id: session.user.id,
+    status: 'open'
+  };
+
+  const { error } = await supabaseClient.from('blood_requests').insert([payload]);
+
+  if (error) {
+    alert(`Post failed: ${error.message}`);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = original || 'Post Request';
+    }
+    return;
+  }
+
+  alert('Your emergency request has been posted.');
+  window.location.href = 'all-requests.html';
+};
+
+window.fetchUrgentRequests = async function () {
+  const container = $('urgent-requests-container');
+  if (!container) return;
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const currentUserId = session?.user?.id || null;
+
+  let query = supabaseClient
+    .from('blood_requests')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (currentUserId) query = query.neq('user_id', currentUserId);
+
+  const { data, error } = await query.limit(20);
+  const rows = (data || []).filter(isBloodPostActive).slice(0, 3);
+
+  if (error || rows.length === 0) {
+    container.innerHTML = '<p class="text-xs text-slate-500 text-center py-8 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-gray-200 dark:border-slate-700 font-bold">No urgent requests right now.</p>';
+    return;
+  }
+
+  container.innerHTML = rows.map((req) => `
+    <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 flex justify-between items-center transition active:scale-95">
+      <div class="min-w-0 pr-3">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="bg-red-100 dark:bg-red-900/30 text-brand px-2 py-0.5 rounded text-[10px] font-black">${req.blood_group}</span>
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter truncate"><i class="fa-solid fa-hospital"></i> ${req.hospital_name || 'Hospital'}</span>
+        </div>
+        <p class="font-bold text-sm text-slate-800 dark:text-white">${req.patient_name} <span class="text-[10px] font-normal text-slate-500">(${req.units} Bag)</span></p>
+        <p class="text-[9px] text-slate-400 font-medium mt-0.5"><i class="fa-regular fa-clock"></i> ${formatDateTime(req.created_at)}</p>
+      </div>
+      <a href="tel:${req.contact_number}"
+         onclick="return initiateEmergencyCall(event, '${String(req.contact_number || '').replace(/'/g, "\\'")}', '${String(req.user_id || '').replace(/'/g, "\\'")}', '${String(req.patient_name || '').replace(/'/g, "\\'")}', '${String(req.id || '').replace(/'/g, "\\'")}')"
+         class="w-10 h-10 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-500 rounded-full flex items-center justify-center hover:bg-green-100 transition shadow-sm border border-green-100 dark:border-green-800/30">
+        <i class="fa-solid fa-phone"></i>
+      </a>
+    </div>
+  `).join('');
+};
+
+window.handleSearch = function () {
+  const bg = $('blood-group-select')?.value;
+  if (!bg) {
+    alert('Please select a blood group first.');
+    return;
+  }
+  window.location.href = `search-results.html?bg=${encodeURIComponent(bg)}`;
+};
+
+window.detectLocation = function () {
+  const label = $('loc-btn');
+  if (label) label.textContent = 'Detecting...';
+
+  if (!navigator.geolocation) {
+    if (label) label.textContent = 'Use Current Location';
+    alert('Geolocation is not supported in this browser.');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    () => {
+      if (label) label.innerHTML = '<i class="fa-solid fa-check text-green-500"></i> Location detected';
+    },
+    () => {
+      if (label) label.textContent = 'Use Current Location';
+      alert('Please allow location access.');
+    }
+  );
+};
+
+async function getCurrentSessionAndProfile() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) return { session: null, profile: null };
+
+  const { data: profile } = await supabaseClient
+    .from('donors')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .maybeSingle();
+
+  return { session, profile };
+}
+
+async function createPendingVerification(payload) {
+  let query = supabaseClient
+    .from('pending_verifications')
+    .select('id,status,created_at')
+    .eq('donor_id', payload.donor_id)
+    .eq('requester_id', payload.requester_id)
+    .eq('source', payload.source)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (payload.request_id) query = query.eq('request_id', payload.request_id);
+
+  const { data } = await query;
+  const latest = data?.[0];
+
+  if (latest) {
+    const latestAt = latest.created_at ? new Date(latest.created_at).getTime() : 0;
+    const withinWindow = Date.now() - latestAt < 60 * 60 * 1000;
+    if (withinWindow && ['pending', 'verified'].includes(latest.status)) {
+      return { skipped: true };
+    }
+  }
+
+  return supabaseClient.from('pending_verifications').insert([payload]);
+}
+
+window.initiateCallTracking = async function (event, phoneNumber, targetDonorId, targetName = '') {
+  if (event?.preventDefault) event.preventDefault();
+
+  const { session, profile } = await getCurrentSessionAndProfile();
+
+  if (!session) {
+    window.location.href = `tel:${phoneNumber}`;
+    return false;
+  }
+
+  const { data: donorProfile } = await supabaseClient
+    .from('donors')
+    .select('user_id,full_name,is_available,availability_locked,cooldown_until')
+    .eq('user_id', targetDonorId)
+    .maybeSingle();
+
+  const donorIsUnavailable = donorProfile
+    ? donorProfile.is_available === false || isCooldownActive(donorProfile)
+    : false;
+
+  if (!donorIsUnavailable) {
+    await createPendingVerification({
+      donor_id: targetDonorId,
+      requester_id: session.user.id,
+      requester_name: profile?.full_name || session.user.email || 'Requester',
+      donor_name: donorProfile?.full_name || targetName || 'Donor',
+      donor_phone: phoneNumber || null,
+      status: 'pending',
+      source: 'donor_search',
+      metadata: { created_from: 'donor_search' }
+    });
+  }
+
+  window.location.href = `tel:${phoneNumber}`;
+  return false;
+};
+
+window.initiateEmergencyCall = async function (event, phoneNumber, requesterId, patientName = '', requestId = null) {
+  if (event?.preventDefault) event.preventDefault();
+
+  const { session, profile } = await getCurrentSessionAndProfile();
+
+  if (!session) {
+    window.location.href = `tel:${phoneNumber}`;
+    return false;
+  }
+
+  const donorUnavailable = !profile || profile.is_available === false || isCooldownActive(profile);
+
+  if (!donorUnavailable) {
+    await createPendingVerification({
+      donor_id: session.user.id,
+      requester_id: requesterId,
+      requester_name: patientName || 'Requester',
+      donor_name: profile.full_name || session.user.email || 'Donor',
+      donor_phone: profile.phone_number || null,
+      request_id: requestId || null,
+      status: 'pending',
+      source: 'emergency_post',
+      metadata: { created_from: 'emergency_post' }
+    });
+  }
+
+  window.location.href = `tel:${phoneNumber}`;
+  return false;
+};
+
+async function applyVerifiedDonationToDonor(donorId) {
+  const { data: donor, error } = await supabaseClient
+    .from('donors')
+    .select('*')
+    .eq('user_id', donorId)
+    .single();
+
+  if (error || !donor) throw new Error(error?.message || 'Donor not found.');
+
+  if (isCooldownActive(donor)) {
+    throw new Error('This donor is already in cooldown.');
+  }
+
+  const today = new Date();
+  const cooldownUntil = new Date(today.getTime() + (90 * 24 * 60 * 60 * 1000));
+
+  const updatePayload = {
+    total_donations: (donor.total_donations || 0) + 1,
+    last_donation_date: today.toISOString().split('T')[0],
+    is_available: false,
+    availability_locked: true,
+    cooldown_until: cooldownUntil.toISOString(),
+    cooldown_reason: 'Donation verified. Cooldown is active for 90 days.'
+  };
+
+  const { error: updateError } = await supabaseClient
+    .from('donors')
+    .update(updatePayload)
+    .eq('user_id', donorId);
+
+  if (updateError) throw new Error(updateError.message);
+
+  await supabaseClient.from('donation_events').insert([{
+    donor_id: donorId,
+    points: 100,
+    source: 'verification',
+    verified_at: new Date().toISOString()
+  }]).catch(() => {});
+}
+
+async function getPendingVerificationForRequester() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) return null;
+
+  const { data } = await supabaseClient
+    .from('pending_verifications')
+    .select('*')
+    .eq('requester_id', session.user.id)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return data || null;
+}
+
+function renderVerificationModal(row) {
+  if (!row || $('fixed-noti-overlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'fixed-noti-overlay';
+  overlay.className = 'fixed inset-0 bg-slate-900/95 z-[80] flex items-center justify-center p-6';
+  overlay.innerHTML = `
+    <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl text-center max-w-xs w-full shadow-2xl">
+      <h3 class="text-lg font-black mb-2 text-slate-800 dark:text-white">Did you receive blood?</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-6">Did you receive blood from <b>${row.donor_name || 'the donor'}</b>?</p>
+      <button onclick="handleVerify('${row.id}', true)" class="w-full bg-brand text-white py-4 rounded-2xl font-black mb-3 transition hover:bg-red-700">Yes, I received it</button>
+      <button onclick="handleVerify('${row.id}', false)" class="w-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 py-4 rounded-2xl font-bold transition hover:bg-slate-200 dark:hover:bg-slate-600">No, I did not</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+window.handleVerify = async function (id, verified) {
+  const overlay = $('fixed-noti-overlay');
+  if (overlay) overlay.style.opacity = '0.65';
+
+  const { data: row, error } = await supabaseClient
+    .from('pending_verifications')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error || !row) {
+    if (overlay) overlay.remove();
+    alert('Verification request not found.');
+    return;
+  }
+
+  if (row.status !== 'pending') {
+    if (overlay) overlay.remove();
+    alert('This verification request was already processed.');
+    return;
+  }
+
+  try {
+    if (verified) {
+      await applyVerifiedDonationToDonor(row.donor_id);
+    }
+
+    const { error: updateError } = await supabaseClient
+      .from('pending_verifications')
+      .update({
+        status: verified ? 'verified' : 'rejected',
+        responded_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .eq('status', 'pending');
+
+    if (updateError) throw new Error(updateError.message);
+
+    if (overlay) overlay.remove();
+    alert(verified ? 'Donation verified successfully.' : 'Marked as not received.');
+    window.location.reload();
+  } catch (err) {
+    if (overlay) overlay.style.opacity = '1';
+    alert(err.message || 'Verification failed.');
+  }
+};
+
+async function handleVerificationFromQueryString() {
+  const params = new URLSearchParams(window.location.search);
+  const verifyStatus = params.get('verify');
+  const verifyId = params.get('verifyId');
+  if (!verifyStatus || !verifyId) return;
+
+  if (verifyStatus !== 'verified' && verifyStatus !== 'rejected') return;
+
+  const { data: row } = await supabaseClient
+    .from('pending_verifications')
+    .select('*')
+    .eq('id', verifyId)
+    .single();
+
+  if (!row || row.status !== 'pending') {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return;
+  }
+
+  try {
+    if (verifyStatus === 'verified') await applyVerifiedDonationToDonor(row.donor_id);
+
+    await supabaseClient
+      .from('pending_verifications')
+      .update({
+        status: verifyStatus,
+        responded_at: new Date().toISOString()
+      })
+      .eq('id', verifyId)
+      .eq('status', 'pending');
+
+    alert(verifyStatus === 'verified' ? 'Donation verified successfully.' : 'Verification marked as rejected.');
+  } catch (error) {
+    alert(error.message || 'Verification failed.');
+  } finally {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    window.location.reload();
+  }
+}
+
+window.recordNewDonation = async function () {
+  if (!confirm('Did you donate blood today?')) return;
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) {
+    alert('Please log in first.');
+    return;
+  }
+
+  const btn = $('record-donation-btn');
+  const original = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
+  }
+
+  try {
+    await applyVerifiedDonationToDonor(session.user.id);
+    alert('Donation record updated.');
+    window.location.reload();
+  } catch (error) {
+    alert(error.message || 'Failed to update donation.');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = original || '<i class="fa-solid fa-droplet"></i> I Donated Today';
+    }
+  }
+};
+
+function bindHiddenAdminTrigger() {
+  const trigger = $('hidden-admin-trigger');
+  if (!trigger) return;
+
+  trigger.addEventListener('click', () => {
+    hiddenAdminTapCount += 1;
+
+    if (hiddenAdminTapTimer) clearTimeout(hiddenAdminTapTimer);
+    hiddenAdminTapTimer = setTimeout(() => {
+      hiddenAdminTapCount = 0;
+    }, 1800);
+
+    if (hiddenAdminTapCount >= 7) {
+      hiddenAdminTapCount = 0;
+      if (hiddenAdminTapTimer) clearTimeout(hiddenAdminTapTimer);
+      window.location.href = 'admin-login.html';
+    }
+  });
+}
+
+async function loadEditProfileGeoOptions(currentProfileData) {
+  const districtSelect = $('district');
+  const upazilaSelect = $('upazila');
+  if (!districtSelect || !upazilaSelect) return;
+
+  try {
+    const [districtRes, upazilaRes] = await Promise.all([
+      fetch('https://raw.githubusercontent.com/nuhil/bangladesh-geocode/master/districts/districts.json'),
+      fetch('https://raw.githubusercontent.com/nuhil/bangladesh-geocode/master/upazilas/upazilas.json')
+    ]);
+
+    const [districtJson, upazilaJson] = await Promise.all([districtRes.json(), upazilaRes.json()]);
+    const districtRows = Array.isArray(districtJson) ? (districtJson.find((item) => Array.isArray(item?.data))?.data || []) : (districtJson?.data || []);
+    const upazilaRows = Array.isArray(upazilaJson) ? (upazilaJson.find((item) => Array.isArray(item?.data))?.data || []) : (upazilaJson?.data || []);
+
+    districtSelect.innerHTML = '<option value="" disabled selected>Select District</option>';
+    districtRows.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach((dist) => {
+      districtSelect.add(new Option(dist.name, dist.name));
+    });
+
+    districtSelect.addEventListener('change', function () {
+      upazilaSelect.innerHTML = '<option value="" disabled selected>Select Upazila</option>';
+      upazilaSelect.disabled = true;
+
+      const districtObj = districtRows.find((row) => row.name === this.value);
+      if (!districtObj) return;
+
+      upazilaRows
+        .filter((row) => String(row.district_id) === String(districtObj.id))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach((row) => {
+          upazilaSelect.add(new Option(row.name, row.name));
+        });
+
+      upazilaSelect.disabled = false;
+    });
+
+    if (currentProfileData?.district) {
+      districtSelect.value = currentProfileData.district;
+      districtSelect.dispatchEvent(new Event('change'));
+      if (currentProfileData?.upazila) {
+        setTimeout(() => {
+          upazilaSelect.value = currentProfileData.upazila;
+        }, 50);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load district/upazila data', error);
+  }
+}
+
+async function bindAvatarUpload(userId) {
+  const avatarInput = $('avatarUpload');
+  if (!avatarInput || !userId) return () => null;
+
+  let uploadedUrl = null;
+
+  avatarInput.addEventListener('change', async function (event) {
+    const file = event.target.files?.[0];
+    const status = $('upload-status');
+    if (!file) return;
 
     try {
-        const registration = await navigator.serviceWorker.ready;
+      if (status) status.textContent = 'Optimizing image...';
 
-        let permission = Notification.permission;
-        if (permission === 'default') permission = await Notification.requestPermission();
-        if (permission !== 'granted') return;
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const maxSize = 400;
 
-        let subscription = await registration.pushManager.getSubscription();
-        if (!subscription) {
-            subscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
-            });
-        }
+      let width = bitmap.width;
+      let height = bitmap.height;
 
-        await supabaseClient
-            .from('donors')
-            .update({ push_subscription: subscription })
-            .eq('user_id', session.user.id);
+      if (width > height && width > maxSize) {
+        height *= maxSize / width;
+        width = maxSize;
+      } else if (height > maxSize) {
+        width *= maxSize / height;
+        height = maxSize;
+      }
 
-        console.log('Push subscription saved successfully.');
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(bitmap, 0, 0, width, height);
+
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+      if (status) status.textContent = 'Uploading image...';
+
+      const fileName = `public/${userId}-${Date.now()}.jpg`;
+      const { error } = await supabaseClient.storage.from('avatars').upload(fileName, blob, { upsert: true });
+      if (error) throw error;
+
+      const { data } = supabaseClient.storage.from('avatars').getPublicUrl(fileName);
+      uploadedUrl = data.publicUrl;
+
+      const preview = $('edit-avatar-preview');
+      if (preview) preview.src = uploadedUrl;
+      if (status) status.textContent = 'Image ready to save.';
     } catch (error) {
-        console.error('Push Setup Error:', error);
+      if (status) status.textContent = `Upload failed: ${error.message}`;
     }
-};
+  });
 
-
-window.getPushSubscriptionStatus = async function() {
-    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-        return { supported: false, granted: false, subscribed: false };
-    }
-
-    try {
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
-        return {
-            supported: true,
-            granted: Notification.permission === 'granted',
-            subscribed: !!subscription,
-            permission: Notification.permission
-        };
-    } catch (error) {
-        console.error('Push status error:', error);
-        return { supported: true, granted: Notification.permission === 'granted', subscribed: false, permission: Notification.permission };
-    }
-};
-
-window.updateNotificationUI = async function() {
-    const statusText = document.getElementById('notification-status-text');
-    const subText = document.getElementById('notification-subtext');
-    const rowBadge = document.getElementById('notification-row-badge');
-    const enableBtnText = document.getElementById('enable-alerts-btn-text');
-    const enableBtnIcon = document.getElementById('enable-alerts-btn-icon');
-
-    const status = await window.getPushSubscriptionStatus();
-    if (!statusText && !subText && !rowBadge && !enableBtnText && !enableBtnIcon) return;
-
-    if (!status.supported) {
-        if (statusText) statusText.innerText = 'Not supported';
-        if (subText) subText.innerText = 'Your browser does not support push alerts.';
-        if (rowBadge) rowBadge.innerText = 'Unavailable';
-        if (enableBtnText) enableBtnText.innerText = 'Not supported';
-        if (enableBtnIcon) enableBtnIcon.className = 'fa-solid fa-ban';
-        return;
-    }
-
-    if (status.granted && status.subscribed) {
-        if (statusText) statusText.innerText = 'Enabled';
-        if (subText) subText.innerText = 'You will receive urgent blood alerts for your area.';
-        if (rowBadge) rowBadge.innerText = 'On';
-        if (enableBtnText) enableBtnText.innerText = 'Enabled';
-        if (enableBtnIcon) enableBtnIcon.className = 'fa-solid fa-check';
-        return;
-    }
-
-    if (status.permission === 'denied') {
-        if (statusText) statusText.innerText = 'Blocked';
-        if (subText) subText.innerText = 'Allow notifications from your browser settings.';
-        if (rowBadge) rowBadge.innerText = 'Blocked';
-        if (enableBtnText) enableBtnText.innerText = 'Open browser settings';
-        if (enableBtnIcon) enableBtnIcon.className = 'fa-solid fa-gear';
-        return;
-    }
-
-    if (statusText) statusText.innerText = 'Off';
-    if (subText) subText.innerText = 'Turn on alerts for emergency requests in your area.';
-    if (rowBadge) rowBadge.innerText = 'Off';
-    if (enableBtnText) enableBtnText.innerText = 'Enable alerts';
-    if (enableBtnIcon) enableBtnIcon.className = 'fa-solid fa-bell';
-};
-
-window.openNotificationSheet = function() {
-    const overlay = document.getElementById('notification-sheet-overlay');
-    const sheet = document.getElementById('notification-sheet');
-    if (!overlay || !sheet) return;
-    overlay.classList.remove('hidden');
-    setTimeout(() => {
-        overlay.classList.add('opacity-100');
-        sheet.classList.remove('translate-y-full');
-    }, 10);
-};
-
-window.closeNotificationSheet = function(dismiss = true) {
-    const overlay = document.getElementById('notification-sheet-overlay');
-    const sheet = document.getElementById('notification-sheet');
-    if (!overlay || !sheet) return;
-    overlay.classList.remove('opacity-100');
-    sheet.classList.add('translate-y-full');
-    setTimeout(() => overlay.classList.add('hidden'), 300);
-    if (dismiss) localStorage.setItem('bloodlink_alert_prompt_dismissed', '1');
-};
-
-window.setupPushNotifications = async function(interactive = false) {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) {
-        alert('Please log in first.');
-        return false;
-    }
-
-    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-        alert('This browser does not support notifications.');
-        return false;
-    }
-
-    try {
-        await window.registerBloodLinkServiceWorker();
-        const currentPermission = Notification.permission;
-        let permission = currentPermission;
-
-        if (interactive && currentPermission !== 'granted') {
-            permission = await Notification.requestPermission();
-        }
-
-        if (permission !== 'granted') {
-            await window.updateNotificationUI();
-            if (permission === 'denied') {
-                alert('Allow notifications from your browser settings.');
-            }
-            return false;
-        }
-
-        const registration = await navigator.serviceWorker.ready;
-        let subscription = await registration.pushManager.getSubscription();
-
-        if (!subscription) {
-            subscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
-            });
-        }
-
-        const { error } = await supabaseClient.from('donors').update({
-            push_subscription: subscription
-        }).eq('user_id', session.user.id);
-
-        if (error) {
-            alert('Failed to save alerts: ' + error.message);
-            return false;
-        }
-
-        localStorage.removeItem('bloodlink_alert_prompt_dismissed');
-        window.closeNotificationSheet(false);
-        await window.updateNotificationUI();
-        return true;
-    } catch (error) {
-        console.error('Push Setup Error:', error);
-        alert('Notification setup failed.');
-        await window.updateNotificationUI();
-        return false;
-    }
-};
-
-window.handleNotificationCTA = async function() {
-    const status = await window.getPushSubscriptionStatus();
-    if (status.permission === 'denied') {
-        alert('Go to browser settings and allow notifications.');
-        return;
-    }
-    await window.setupPushNotifications(true);
-};
-
-window.maybeShowNotificationPrompt = async function() {
-    const onProfilePage = window.location.pathname.includes('donor-profile.html');
-    if (!onProfilePage) return;
-    if (localStorage.getItem('bloodlink_alert_prompt_dismissed') === '1') return;
-
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) return;
-
-    const status = await window.getPushSubscriptionStatus();
-    if (status.supported && !status.granted) {
-        setTimeout(() => window.openNotificationSheet(), 900);
-    }
-};
+  return () => uploadedUrl;
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await window.registerBloodLinkServiceWorker();
-    await window.updateNotificationUI();
-    await window.maybeShowNotificationPrompt();
+  updateEnglishUi();
+  bindHiddenAdminTrigger();
+  await checkAuthState();
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+
+  if (session && window.location.pathname.includes('login.html')) {
+    window.location.href = 'donor-profile.html';
+    return;
+  }
+
+  await handleVerificationFromQueryString();
+
+  if ('serviceWorker' in navigator) {
+    try { await ensureServiceWorker(); } catch (_) {}
+  }
+
+  syncNotificationStatusForCurrentUser();
+
+  const user = session?.user || null;
+  const donorForm = $('donorForm');
+  const viewName = $('view-name');
+  const availToggleBtn = $('isAvailable');
+
+  let currentProfileData = null;
+  let getUploadedAvatarUrl = () => null;
+
+  if (user) {
+    const { data: profile } = await supabaseClient
+      .from('donors')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    currentProfileData = await autoUnlockCooldown(user.id, profile);
+
+    if (currentProfileData) {
+      renderCooldownBanner(currentProfileData);
+
+      if (availToggleBtn) {
+        availToggleBtn.checked = currentProfileData.is_available !== false && !isCooldownActive(currentProfileData);
+      }
+
+      const badgeContainer = $('view-badge-container');
+      if (badgeContainer) badgeContainer.innerHTML = getBadgeHTML(currentProfileData.total_donations || 0);
+
+      if (viewName) {
+        viewName.innerHTML = `${currentProfileData.full_name || 'Donor'} <i class="fa-solid fa-circle-check text-blue-500 text-sm"></i>`;
+        setText('view-bg', currentProfileData.blood_group || 'N/A');
+        setText('view-phone', currentProfileData.phone_number || '-');
+        setText('view-location', currentProfileData.district && currentProfileData.upazila ? `${currentProfileData.upazila}, ${currentProfileData.district}` : 'Location not set');
+        setText('view-last-donation', currentProfileData.last_donation_date || '-');
+
+        const avatarContainer = $('view-avatar-container');
+        if (currentProfileData.avatar_url && avatarContainer) {
+          avatarContainer.innerHTML = `<img src="${currentProfileData.avatar_url}" class="w-full h-full object-cover">`;
+        }
+
+        const shareBtn = $('share-my-profile-btn');
+        if (shareBtn) {
+          shareBtn.onclick = () => {
+            const profileUrl = `${window.location.origin}/public-profile.html?id=${user.id}`;
+            if (navigator.share && window.isSecureContext) {
+              navigator.share({ title: 'Blood Donor Profile', text: 'I am a blood donor.', url: profileUrl }).catch(() => {});
+            } else {
+              prompt('Copy your profile link:', profileUrl);
+            }
+          };
+        }
+      }
+
+      if (donorForm) {
+        if ($('fullName')) $('fullName').value = currentProfileData.full_name || '';
+        if ($('bloodGroup')) $('bloodGroup').value = currentProfileData.blood_group || '';
+        if ($('phoneNumber')) $('phoneNumber').value = currentProfileData.phone_number || '';
+        if ($('lastDonation')) $('lastDonation').value = currentProfileData.last_donation_date || '';
+        if ($('bio')) $('bio').value = currentProfileData.bio || '';
+        if ($('district')) $('district').value = currentProfileData.district || '';
+        if ($('upazila')) $('upazila').value = currentProfileData.upazila || '';
+        if ($('edit-avatar-preview') && currentProfileData.avatar_url) $('edit-avatar-preview').src = currentProfileData.avatar_url;
+      }
+    }
+  }
+
+  if ($('avatarUpload') && user) {
+    getUploadedAvatarUrl = await bindAvatarUpload(user.id);
+  }
+
+  if (availToggleBtn) {
+    availToggleBtn.addEventListener('change', async function () {
+      if (!user) {
+        alert('Please log in first.');
+        this.checked = false;
+        return;
+      }
+
+      if (isCooldownActive(currentProfileData)) {
+        this.checked = false;
+        alert(`You cannot turn availability on before ${formatDateTime(currentProfileData.cooldown_until)}.`);
+        renderCooldownBanner(currentProfileData);
+        return;
+      }
+
+      const nextValue = this.checked;
+      const { error } = await supabaseClient.from('donors').update({ is_available: nextValue }).eq('user_id', user.id);
+      if (error) {
+        this.checked = !nextValue;
+        alert(`Failed to update availability: ${error.message}`);
+        return;
+      }
+
+      currentProfileData = { ...(currentProfileData || {}), is_available: nextValue };
+      renderCooldownBanner(currentProfileData);
+    });
+  }
+
+  if (donorForm) {
+    await loadEditProfileGeoOptions(currentProfileData);
+
+    donorForm.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      if (!user) {
+        alert('Please log in first.');
+        return;
+      }
+
+      const btn = $('btn-save') || donorForm.querySelector('button[type="submit"]');
+      const original = btn ? btn.innerHTML : '';
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+      }
+
+      const payload = {
+        user_id: user.id,
+        full_name: $('fullName')?.value?.trim() || null,
+        blood_group: $('bloodGroup')?.value || null,
+        district: $('district')?.value || null,
+        upazila: $('upazila')?.value || null,
+        phone_number: $('phoneNumber')?.value?.trim() || null,
+        last_donation_date: $('lastDonation')?.value || currentProfileData?.last_donation_date || null,
+        total_donations: currentProfileData?.total_donations || 0,
+        bio: $('bio')?.value?.trim() || null,
+        avatar_url: getUploadedAvatarUrl() || currentProfileData?.avatar_url || null,
+        is_available: currentProfileData?.is_available ?? true,
+        availability_locked: currentProfileData?.availability_locked ?? false,
+        cooldown_until: currentProfileData?.cooldown_until || null,
+        cooldown_reason: currentProfileData?.cooldown_reason || null
+      };
+
+      const { error } = await supabaseClient.from('donors').upsert(payload, { onConflict: 'user_id' });
+      if (error) {
+        alert(`Save failed: ${error.message}`);
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = original || 'Save';
+        }
+        return;
+      }
+
+      window.location.href = 'donor-profile.html';
+    });
+  }
+
+  const pendingForRequester = await getPendingVerificationForRequester();
+  if (pendingForRequester) renderVerificationModal(pendingForRequester);
 });
